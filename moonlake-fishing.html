@@ -22,6 +22,9 @@
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+/* phones: fit the visible screen (not the area behind the browser bars) */
+@supports (height: 100dvh) { html, body { height: 100dvh; } }
+body { position: fixed; inset: 0; height: auto; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-user-select: none; user-select: none; }
 .app { height: 100%; display: grid; grid-template-rows: 1fr auto; padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: max(10px, env(safe-area-inset-right, 0px)); box-sizing: border-box; }
 .board { min-height: 0; display: grid; place-items: center; padding-top: max(8px, env(safe-area-inset-top, 0px)); }
@@ -38,6 +41,11 @@ canvas { display: block; touch-action: none; border-radius: 14px; cursor: pointe
 .big { font-family: var(--display); font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; }
 .go { justify-self: start; font: 700 16px var(--body); color: #1a1406; background: var(--moon); border: 0; border-radius: 10px; padding: 10px 20px; cursor: pointer; box-shadow: 0 0 18px rgba(246, 231, 180, 0.4); }
 .go:focus-visible { outline: 2px solid #8fd8ff; outline-offset: 3px; }
+/* phones: cards fit the width, and tall cards scroll instead of being cut off */
+.card { box-sizing: border-box; }
+.overlay { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.overlay > .card { margin: auto; }
+@media (max-height: 520px) { .overlay > .card { padding: 16px 20px; gap: 10px; } .overlay > .card h1 { font-size: clamp(30px, 9vh, 44px); } }
 </style>
 </head>
 <body>

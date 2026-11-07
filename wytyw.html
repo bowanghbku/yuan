@@ -25,6 +25,9 @@
   color-scheme: dark;
 }
 html, body { height: 100%; }
+/* phones: fit the visible screen (not the area behind the browser bars) */
+@supports (height: 100dvh) { html, body { height: 100dvh; } }
+body { position: fixed; inset: 0; height: auto; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 [hidden] { display: none !important; }
 body {
   background: var(--bg); color: var(--ink);
@@ -102,7 +105,18 @@ kbd { font-family: var(--mono); font-size: 12px; color: var(--ink); border: 1px 
 }
 .pad button.on { background: rgba(255, 179, 71, 0.38); }
 @media (pointer: coarse) { .pad { display: flex; } }
+@media (max-height: 430px) { .pad button { width: 52px; height: 52px; font-size: 19px; } .pad .grp { gap: 8px; } }
+.pad { padding-bottom: max(18px, calc(env(safe-area-inset-bottom, 0px) + 10px)); }
 @media (prefers-reduced-motion: reduce) { .blink { animation: none; } }
+/* phones: cards fit the width, and tall cards scroll instead of being cut off */
+.card { box-sizing: border-box; }
+.overlay { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.overlay > .card { margin: auto; }
+@media (max-height: 520px) { .overlay > .card { padding: 16px 20px; gap: 10px; } .overlay > .card h1 { font-size: clamp(30px, 9vh, 44px); } }
+/* phones: no keyboard hints, room above and below the card */
+.overlay { padding-block: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px)); }
+@media (pointer: coarse) { .keys, .blink { display: none; } }
+#title:not([hidden]) ~ .pad, #over:not([hidden]) ~ .pad { display: none; }
 </style>
 </head>
 <body style="margin:0">
@@ -122,7 +136,7 @@ kbd { font-family: var(--mono); font-size: 12px; color: var(--ink); border: 1px 
       <h1>wytyw</h1>
       <div class="lvl" id="titleLevel">Level 0 · goal 80 m</div>
       <p>Each level has a goal depth. Fly through the green goal gate to unlock the next level, which starts again from the cave entrance with a tighter cave, fewer cushions, more spikes and a hungrier battery.</p>
-      <p>Watch out for cars driving along the cave floor (one red one is very fast) and other drones flying around: touch either one and you're out. Air plants on the floor blow a jet of air that pushes your drone up, but touching the plant itself ends the run. Water taps on the ceiling pour a stream that pushes your drone down; the taps themselves are solid. Some stretches of the ceiling and floor have blue cushions: you bounce off them, but each bounce costs a little battery. Bare amber rock and red spikes are hard: hit them and it's over. The battery drains as you fly, and thrust drains it faster. Grab the green cells to recharge.</p>
+      <p>Watch out for cars driving along the cave floor (one red one is very fast) and other drones flying around: touch either one and you're out. Air plants on the floor blow a jet of air that pushes your drone up, but touching the plant itself ends the run. Water taps on the ceiling pour a stream that pushes your drone down; the taps themselves are solid. Pink poison flowers grow on the floor: touch one and you're out. Some stretches of the ceiling and floor have blue cushions: you bounce off them, but each bounce costs a little battery. Bare amber rock and red spikes are hard: hit them and it's over. The battery drains as you fly, and thrust drains it faster. Grab the green cells to recharge.</p>
       <div class="keys">
         <kbd>↑</kbd><span>Thrust up</span>
         <kbd>↓</kbd><span>Dive down</span>
@@ -220,12 +234,12 @@ kbd { font-family: var(--mono); font-size: 12px; color: var(--ink); border: 1px 
   // ---------- cave ----------
   const SEG = 16, PX_PER_M = 40;
   const goalX = () => 140 + P.goal * PX_PER_M;
-  let top, bot, tSp, bSp, tPad, bPad, runs, impacts = [], cells, cars, bots, plants, taps, nextCar, nextBot, nextPlant, nextTap, flecks, spike, nextCell, ph;
+  let top, bot, tSp, bSp, tPad, bPad, runs, impacts = [], cells, cars, bots, plants, taps, flowers, nextFlower, nextCar, nextBot, nextPlant, nextTap, flecks, spike, nextCell, ph;
   function resetCave() {
     seed = (Math.random() * 1e9) >>> 0;
     top = []; bot = []; tSp = []; bSp = []; tPad = []; bPad = []; runs = { t: { on: true, left: P.safeStart }, b: { on: true, left: P.safeStart } }; impacts = []; cells = []; flecks = [];
     spike = null; nextCell = 700;
-    cars = []; bots = []; plants = []; taps = []; nextTap = 1900; nextCar = 1300; nextBot = 1700; nextPlant = 1500;
+    cars = []; bots = []; plants = []; taps = []; nextTap = 1900; flowers = []; nextFlower = 1400; nextCar = 1300; nextBot = 1700; nextPlant = 1500;
     ph = [rand() * 6.3, rand() * 6.3, rand() * 6.3, rand() * 6.3];
   }
   function gen(i) {
@@ -280,6 +294,12 @@ kbd { font-family: var(--mono); font-size: 12px; color: var(--ink); border: 1px 
         && (!plants.length || Math.abs(x - plants[plants.length - 1].x) > 220)) {
       taps.push({ x, y: t, fl: b, ph: rand() * 6.3 });
       nextTap = x + 750 + rand() * 750;
+    }
+    // poison flowers: small, on flat floor, kept clear of air plants
+    if (x >= nextFlower && i > P.safeStart + 4 && x < goalX() - 150 && !spike && bSp[i] === 0
+        && !plants.some(pl => Math.abs(pl.x - x) < 120)) {
+      flowers.push({ x, y: b, ph: rand() * 6.3, s: 0.9 + rand() * 0.3 });
+      nextFlower = x + Math.max(360, 900 - level * 60) + rand() * 500;
     }
     // air plants: rooted on flat floor, they blow a jet of air upward
     if (x >= nextPlant && i > P.safeStart + 6 && x < goalX() - 250 && !spike && bSp[i] === 0) {
@@ -491,6 +511,12 @@ kbd { font-family: var(--mono); font-size: 12px; color: var(--ink); border: 1px 
         }
       }
 
+      // poison flowers: any touch ends the run
+      if (state === 'play') for (const fw of flowers) {
+        const dx = Math.abs(fw.x - d.x);
+        if (dx < 24 && d.y > fw.y - 34 * fw.s - 8) { crash('Touched a poison flower'); break; }
+      }
+
       // air plants: jets push the drone up; the plant itself is hard
       for (const pl of plants) {
         const dx = Math.abs(pl.x - d.x);
@@ -541,6 +567,10 @@ kbd { font-family: var(--mono); font-size: 12px; color: var(--ink); border: 1px 
         parts.push({ x: tp.x + 4 + (Math.random() - 0.5) * 10, y: tp.y + 30, vx: (Math.random() - 0.5) * 12, vy: sp, life: len / sp, max: len / sp, c: '#bfe3ff', g: 0 });
       }
       if (Math.random() < 0.5) parts.push({ x: tp.x + 4, y: tp.fl - 2, vx: (Math.random() - 0.5) * 160, vy: -60 - Math.random() * 100, life: 0.35, max: 0.35, c: '#7cc4ff', g: 1 });
+    }
+    for (const fw of flowers) {
+      if (fw.x < camX - 40 || fw.x > camX + W + 40 || Math.random() > 0.08) continue;
+      parts.push({ x: fw.x + (Math.random() - 0.5) * 16, y: fw.y - 30 * fw.s, vx: (Math.random() - 0.5) * 20, vy: -20 - Math.random() * 30, life: 1.2, max: 1.2, c: '#b6ff3f', g: 0 });
     }
     for (const pl of plants) {
       if (pl.x < camX - 40 || pl.x > camX + W + 40 || Math.random() > 0.8) continue;
@@ -766,6 +796,7 @@ kbd { font-family: var(--mono); font-size: 12px; color: var(--ink); border: 1px 
     drawGoal(x0, x1, now);
     drawPlants(x0, x1, now);
     drawTaps(x0, x1, now);
+    drawFlowers(x0, x1, now);
     drawTraffic(x0, x1, now);
 
     for (const p of parts) {
@@ -815,6 +846,38 @@ kbd { font-family: var(--mono); font-size: 12px; color: var(--ink); border: 1px 
         ctx.fillStyle = 'rgba(90,220,255,0.18)';
         for (let y = H - h + 10; y < H - 10; y += 16) for (let k = 0; k < 3; k++) if (((x + y + k * 13) % 5) < 3) ctx.fillRect(x + 8 + k * 17, y, 7, 4);
       }
+    }
+  }
+
+  function drawFlowers(x0, x1, now) {
+    for (const fw of flowers) {
+      if (fw.x < x0 - 30 || fw.x > x1 + 30) continue;
+      const sway = Math.sin(now / 500 + fw.ph) * 0.08;
+      ctx.save(); ctx.translate(fw.x, fw.y); ctx.scale(fw.s, fw.s); ctx.rotate(sway);
+      // toxic haze
+      const hz = ctx.createRadialGradient(0, -28, 2, 0, -28, 30);
+      hz.addColorStop(0, 'rgba(182,255,63,0.22)'); hz.addColorStop(1, 'rgba(182,255,63,0)');
+      ctx.fillStyle = hz; ctx.fillRect(-30, -58, 60, 60);
+      // stem and thorny leaves
+      ctx.strokeStyle = '#2f6b2a'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(3, -12, 0, -24); ctx.stroke();
+      ctx.fillStyle = '#3d8a33';
+      ctx.beginPath(); ctx.moveTo(1, -8); ctx.lineTo(-12, -14); ctx.lineTo(-4, -6); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(1, -14); ctx.lineTo(13, -19); ctx.lineTo(5, -11); ctx.closePath(); ctx.fill();
+      // petals
+      ctx.translate(0, -28);
+      ctx.fillStyle = '#ff3fa4'; ctx.shadowColor = '#ff3fa4'; ctx.shadowBlur = 10;
+      for (let k = 0; k < 5; k++) {
+        ctx.save(); ctx.rotate(k * Math.PI * 2 / 5 + now / 3000);
+        ctx.beginPath(); ctx.ellipse(0, -7, 4.5, 7.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+      ctx.shadowBlur = 0;
+      // dark spots and a sickly centre
+      ctx.fillStyle = 'rgba(60,0,40,0.7)';
+      for (let k = 0; k < 5; k++) { const a = k * Math.PI * 2 / 5 + now / 3000; ctx.beginPath(); ctx.arc(Math.sin(a) * 8, -Math.cos(a) * 8, 1.3, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#b6ff3f'; ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
     }
   }
 

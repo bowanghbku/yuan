@@ -24,6 +24,8 @@
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+@supports (height: 100dvh) { html, body { height: 100dvh; } }
+body { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--body); }
 
 /* menu */

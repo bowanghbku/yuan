@@ -21,6 +21,9 @@
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+/* phones: fit the visible screen (not the area behind the browser bars) */
+@supports (height: 100dvh) { html, body { height: 100dvh; } }
+body { position: fixed; inset: 0; height: auto; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--sky); color: var(--ink); font-family: var(--font); overflow: hidden; -webkit-user-select: none; user-select: none; }
 #stage { position: fixed; inset: 0; display: grid; place-items: center; }
 canvas { display: block; touch-action: none; }
@@ -37,6 +40,11 @@ canvas { display: block; touch-action: none; }
 .go:focus-visible { outline: 2px solid var(--warm); outline-offset: 3px; }
 @media (pointer: coarse) { .keys-only { display: none; } }
 @media (pointer: fine) { .touch-only { display: none; } }
+/* phones: cards fit the width, and tall cards scroll instead of being cut off */
+.card { box-sizing: border-box; }
+.overlay { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.overlay > .card { margin: auto; }
+@media (max-height: 520px) { .overlay > .card { padding: 16px 20px; gap: 10px; } .overlay > .card h1 { font-size: clamp(30px, 9vh, 44px); } }
 </style>
 </head>
 <body>

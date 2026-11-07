@@ -21,6 +21,9 @@
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+/* phones: fit the visible screen (not the area behind the browser bars) */
+@supports (height: 100dvh) { html, body { height: 100dvh; } }
+body { position: fixed; inset: 0; height: auto; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: radial-gradient(ellipse at 50% 100%, #2a1550 0%, var(--bg) 60%) fixed, var(--bg); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-user-select: none; user-select: none; }
 #stage { position: fixed; inset: 0; display: grid; place-items: center; }
 canvas { display: block; touch-action: none; border-radius: 16px; box-shadow: 0 0 0 1px #2c1f52; cursor: crosshair; }
@@ -33,6 +36,11 @@ canvas { display: block; touch-action: none; border-radius: 16px; box-shadow: 0 
 .big { font-family: var(--display); font-size: 46px; line-height: 1; font-variant-numeric: tabular-nums; }
 .go { justify-self: start; font: 700 16px var(--body); color: #1a0716; background: var(--hot); border: 0; border-radius: 12px; padding: 10px 22px; cursor: pointer; box-shadow: 0 0 18px rgba(255, 95, 168, 0.5); }
 .go:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+/* phones: cards fit the width, and tall cards scroll instead of being cut off */
+.card { box-sizing: border-box; }
+.overlay { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.overlay > .card { margin: auto; }
+@media (max-height: 520px) { .overlay > .card { padding: 16px 20px; gap: 10px; } .overlay > .card h1 { font-size: clamp(30px, 9vh, 44px); } }
 </style>
 </head>
 <body>

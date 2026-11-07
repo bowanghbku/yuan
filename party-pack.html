@@ -22,6 +22,9 @@
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+/* phones: fit the visible screen (not the area behind the browser bars) */
+@supports (height: 100dvh) { html, body { height: 100dvh; } }
+body { position: fixed; inset: 0; height: auto; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--body); -webkit-user-select: none; user-select: none; overflow: hidden; }
 button { font-family: var(--body); }
 .wrap { height: 100%; overflow-y: auto; box-sizing: border-box; padding-block: 22px 28px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }

@@ -21,6 +21,9 @@
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+/* phones: fit the visible screen (not the area behind the browser bars) */
+@supports (height: 100dvh) { html, body { height: 100dvh; } }
+body { position: fixed; inset: 0; height: auto; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: radial-gradient(ellipse at 50% 0%, #2a1c48 0%, var(--night) 60%) fixed, var(--night); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-user-select: none; user-select: none; }
 .app { height: 100%; display: grid; grid-template-rows: auto auto 1fr; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); box-sizing: border-box; }
 header { display: flex; align-items: center; justify-content: center; gap: 14px; padding-block: max(10px, env(safe-area-inset-top, 0px)) 4px; }
@@ -49,6 +52,11 @@ canvas { display: block; touch-action: none; border-radius: 16px; }
 .go { justify-self: start; font: 800 16px var(--display); color: #2a1a04; background: var(--gold); border: 0; border-radius: 12px; padding: 10px 22px; cursor: pointer; box-shadow: 0 0 18px rgba(255, 203, 92, 0.45); }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 .ghost { font: 700 14px var(--body); color: var(--ink); background: none; border: 1px solid #3a2f5c; border-radius: 12px; padding: 10px 16px; cursor: pointer; }
+/* phones: cards fit the width, and tall cards scroll instead of being cut off */
+.card { box-sizing: border-box; }
+.overlay { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.overlay > .card { margin: auto; }
+@media (max-height: 520px) { .overlay > .card { padding: 16px 20px; gap: 10px; } .overlay > .card h1 { font-size: clamp(30px, 9vh, 44px); } }
 </style>
 </head>
 <body>

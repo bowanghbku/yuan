@@ -24,6 +24,9 @@
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+/* phones: fit the visible screen (not the area behind the browser bars) */
+@supports (height: 100dvh) { html, body { height: 100dvh; } }
+body { position: fixed; inset: 0; height: auto; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--dark); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-user-select: none; user-select: none; }
 .app { height: 100%; display: grid; grid-template-rows: auto 1fr; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); box-sizing: border-box; }
 .hud { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 22px; padding-block: max(10px, env(safe-area-inset-top, 0px)) 8px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -44,6 +47,11 @@ canvas { display: block; touch-action: none; border-radius: 10px; }
 .go:focus-visible { outline: 2px solid var(--key); outline-offset: 3px; }
 @media (pointer: coarse) { .keys-only { display: none; } }
 @media (pointer: fine) { .touch-only { display: none; } }
+/* phones: cards fit the width, and tall cards scroll instead of being cut off */
+.card { box-sizing: border-box; }
+.overlay { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.overlay > .card { margin: auto; }
+@media (max-height: 520px) { .overlay > .card { padding: 16px 20px; gap: 10px; } .overlay > .card h1 { font-size: clamp(30px, 9vh, 44px); } }
 </style>
 </head>
 <body>

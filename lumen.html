@@ -26,6 +26,9 @@
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+/* phones: fit the visible screen (not the area behind the browser bars) */
+@supports (height: 100dvh) { html, body { height: 100dvh; } }
+body { position: fixed; inset: 0; height: auto; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: radial-gradient(ellipse at 50% 40%, #151233 0%, var(--void) 70%) fixed, var(--void); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-user-select: none; user-select: none; }
 .app { height: 100%; display: grid; grid-template-rows: auto 1fr; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); box-sizing: border-box; }
 header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding-block: 12px 8px; }
@@ -58,6 +61,11 @@ canvas { display: block; touch-action: manipulation; cursor: pointer; }
 .lv.cur { box-shadow: 0 0 0 2px var(--beam); }
 .lv:disabled { opacity: 0.3; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .card { box-shadow: none; } }
+/* phones: cards fit the width, and tall cards scroll instead of being cut off */
+.card { box-sizing: border-box; }
+.overlay { overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.overlay > .card { margin: auto; }
+@media (max-height: 520px) { .overlay > .card { padding: 16px 20px; gap: 10px; } .overlay > .card h1 { font-size: clamp(30px, 9vh, 44px); } }
 </style>
 </head>
 <body>
