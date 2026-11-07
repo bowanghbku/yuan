@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Night Tower</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600&display=swap">
+<style>
+/* Layout: full-height portrait playfield centred on a dusk-to-night sky; floor count + best drawn at the top; menu cards as overlays. Single night look by choice. */
+:root {
+  --sky: #0a0c1c;
+  --ink: #f5f1ea;
+  --muted: #9a97ad;
+  --lamp: #ffcf6e;
+  --panel: rgba(14, 14, 28, 0.9);
+  --display: "Archivo Black", "Arial Black", system-ui, sans-serif;
+  --body: "Archivo", system-ui, -apple-system, Segoe UI, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--sky); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-user-select: none; user-select: none; }
+#stage { position: fixed; inset: 0; display: grid; place-items: center; }
+canvas { display: block; touch-action: none; cursor: pointer; }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); background: rgba(5, 5, 14, 0.45); }
+.card { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid rgba(255, 207, 110, 0.3); border-radius: 14px; padding: 24px; display: grid; gap: 12px; }
+.card h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(38px, 10vw, 54px); line-height: 0.95; color: var(--lamp); text-shadow: 0 0 22px rgba(255, 207, 110, 0.5); }
+.card h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 28px; }
+.card p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; }
+.card p b { color: var(--ink); }
+.big { font-family: var(--display); font-size: 52px; font-variant-numeric: tabular-nums; }
+.go { justify-self: start; font: 600 15px var(--body); color: #14100a; background: var(--lamp); border: 0; border-radius: 8px; padding: 11px 20px; cursor: pointer; box-shadow: 0 0 18px rgba(255, 207, 110, 0.45); }
+.go:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div class="overlay" id="title">
+    <div class="card">
+      <h1>Night Tower</h1>
+      <p>Build the tallest tower in the city. A new floor slides back and forth: <b>tap, click or press Space</b> to drop it.</p>
+      <p>Whatever hangs over the edge gets sliced off and falls, so your tower narrows. Land a <b>perfect</b> drop to keep the full width, and three perfects in a row make the floor grow back a little.</p>
+      <button class="go" id="startBtn">Start building</button>
+    </div>
+  </div>
+  <div class="overlay" id="end" hidden>
+    <div class="card">
+      <h2 id="endTitle">Tower complete</h2>
+      <div class="big" id="endScore">0</div>
+      <p id="endText"></p>
+      <button class="go" id="againBtn">Build again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const cv = $('c'), ctx = cv.getContext('2d');
+  const W = 420, H = 720, FH = 28, BASE_W = 220;
+  let sc = 1;
+  function resize() {
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    sc = Math.min(innerWidth / W, innerHeight / H);
+    cv.style.width = W * sc + 'px'; cv.style.height = H * sc + 'px';
+    cv.width = Math.round(W * sc * dpr); cv.height = Math.round(H * sc * dpr);
+    ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+  }
+  addEventListener('resize', resize); resize();
+
+  let floors, mover, debris, parts, camY, camTarget, state = 'title', perfectRun, t = 0, best = 0, flash = 0, floatTxt = [];
+  try { best = +localStorage.getItem('nighttower-best') || 0; } catch (e) {}
+  const GROUND = H - 90;
+  const hue = n => (35 + n * 9) % 360;
+
+  function reset() {
+    floors = [{ x: (W - BASE_W) / 2, w: BASE_W, n: 0 }];
+    debris = []; parts = []; floatTxt = []; perfectRun = 0; camY = 0; camTarget = 0;
+    spawn();
+  }
+  function spawn() {
+    const top = floors[floors.length - 1], n = floors.length;
+    const fromLeft = n % 2 === 1;
+    const speed = Math.min(420, 150 + n * 7);
+    mover = { x: fromLeft ? -top.w : W, w: top.w, n, v: fromLeft ? speed : -speed };
+  }
+  const floorY = n => GROUND - (n + 1) * FH;
+
+  // ---------- audio ----------
+  let actx = null;
+  function tone(f, d = 0.12, type = 'triangle', v = 0.12) {
+    try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const o = actx.createOscillator(), g = actx.createGain(), now = actx.currentTime;
+      o.type = type; o.frequency.value = f; g.gain.setValueAtTime(v, now); g.gain.exponentialRampToValueAtTime(0.001, now + d);
+      o.connect(g).connect(actx.destination); o.start(now); o.stop(now + d + 0.02); } catch (e) {}
+  }
+  const SCALE = [262, 294, 330, 392, 440, 523, 587, 659, 784, 880];
+
+  function drop() {
+    if (state !== 'play') return;
+    const top = floors[floors.length - 1], m = mover;
+    const left = Math.max(top.x, m.x), right = Math.min(top.x + top.w, m.x + m.w);
+    const overlap = right - left;
+    if (overlap <= 0) {
+      debris.push({ x: m.x, w: m.w, y: floorY(m.n), vy: 0, vx: m.v * 0.2, rot: 0, vr: (Math.random() - 0.5) * 2, n: m.n });
+      mover = null; tone(110, 0.5, 'sawtooth', 0.12); return gameOver();
+    }
+    const off = Math.abs(m.x - top.x);
+    if (off <= 4) {
+      // perfect: snap to the floor below
+      perfectRun++;
+      let w = top.w, x = top.x;
+      if (perfectRun >= 3 && w < BASE_W) { const g = Math.min(12, BASE_W - w); w += g; x -= g / 2; }
+      floors.push({ x, w, n: m.n });
+      flash = 0.35; tone(SCALE[Math.min(perfectRun - 1, SCALE.length - 1)], 0.2, 'sine', 0.16);
+      floatTxt.push({ txt: perfectRun >= 3 ? 'PERFECT ×' + perfectRun : 'PERFECT', y: floorY(m.n) - 10, life: 0.9 });
+      for (let i = 0; i < 16; i++) parts.push({ x: x + Math.random() * w, y: floorY(m.n) + FH / 2, vx: (Math.random() - 0.5) * 120, vy: -60 - Math.random() * 120, life: 0.6, c: 'hsl(' + hue(m.n) + ',90%,75%)' });
+    } else {
+      perfectRun = 0;
+      floors.push({ x: left, w: overlap, n: m.n });
+      const cutX = m.x < top.x ? m.x : right, cutW = m.w - overlap;
+      debris.push({ x: cutX, w: cutW, y: floorY(m.n), vy: 0, vx: (m.x < top.x ? -1 : 1) * 40, rot: 0, vr: (m.x < top.x ? -1 : 1) * (1 + Math.random()), n: m.n });
+      tone(196 + Math.min(m.n, 30) * 6, 0.1, 'square', 0.05);
+    }
+    camTarget = Math.max(0, (floors.length - 9) * FH);
+    spawn();
+  }
+
+  function gameOver() {
+    state = 'end';
+    const score = floors.length - 1, newBest = score > best;
+    if (newBest) { best = score; try { localStorage.setItem('nighttower-best', String(best)); } catch (e) {} }
+    setTimeout(() => {
+      $('endTitle').textContent = newBest ? 'New record!' : 'Tower complete';
+      $('endScore').textContent = score + (score === 1 ? ' floor' : ' floors');
+      $('endText').textContent = newBest ? 'The tallest tower you\'ve built so far.' : 'Your best is ' + best + ' floors.';
+      $('end').hidden = false; $('againBtn').focus();
+    }, 900);
+  }
+
+  // ---------- update ----------
+  function update(dt) {
+    t += dt;
+    if (state === 'play' && mover) {
+      mover.x += mover.v * dt;
+      if (mover.x > W - mover.w * 0.15 && mover.v > 0) mover.v *= -1;
+      if (mover.x < -mover.w * 0.85 && mover.v < 0) mover.v *= -1;
+    }
+    camY += (camTarget - camY) * Math.min(1, 4 * dt);
+    for (const d of debris) { d.vy += 900 * dt; d.y += d.vy * dt; d.x += d.vx * dt; d.rot += d.vr * dt; }
+    debris = debris.filter(d => d.y < H + camY + 200);
+    for (const p of parts) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 250 * dt; }
+    parts = parts.filter(p => p.life > 0);
+    for (const f of floatTxt) { f.life -= dt; f.y -= 30 * dt; }
+    floatTxt = floatTxt.filter(f => f.life > 0);
+    if (flash > 0) flash -= dt;
+  }
+
+  // ---------- drawing ----------
+  const stars = Array.from({ length: 120 }, () => ({ x: Math.random() * W, y: Math.random() * 3000, s: Math.random() * 1.5 + 0.4 }));
+  const skyline = Array.from({ length: 16 }, (_, i) => ({ x: i * 28 - 10, w: 22 + Math.random() * 14, h: 50 + Math.random() * 120 }));
+  function drawFloor(f, y, alpha) {
+    const h = hue(f.n);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'hsl(' + h + ',45%,26%)'; ctx.fillRect(f.x, y, f.w, FH);
+    ctx.fillStyle = 'hsl(' + h + ',55%,38%)'; ctx.fillRect(f.x, y, f.w, 4);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(f.x, y + FH - 3, f.w, 3);
+    // windows, lit in a fixed pattern per floor
+    for (let wx = f.x + 7; wx + 10 < f.x + f.w - 4; wx += 17) {
+      const lit = ((Math.floor(wx / 17) * 7 + f.n * 13) % 5) > 1;
+      ctx.fillStyle = lit ? 'hsl(' + (h + 10) + ',95%,72%)' : 'rgba(10,12,28,0.7)';
+      if (lit) { ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8; }
+      ctx.fillRect(wx, y + 9, 10, 12); ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+  }
+  function render() {
+    // sky gets darker as you climb
+    const k = Math.min(1, camY / 2000);
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, 'rgb(' + (18 - 10 * k) + ',' + (16 - 8 * k) + ',' + (44 - 20 * k) + ')');
+    sky.addColorStop(1, 'rgb(' + (60 - 45 * k) + ',' + (34 - 22 * k) + ',' + (70 - 45 * k) + ')');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    for (const s of stars) { const y = s.y - 2300 + camY * 0.4; if (y < 0 || y > H) continue; ctx.fillStyle = 'rgba(255,250,235,' + (0.25 + k * 0.5) * (0.6 + Math.sin(t * 2 + s.x) * 0.4) + ')'; ctx.fillRect(s.x, y, s.s, s.s); }
+    // moon
+    ctx.fillStyle = '#fff3d4'; ctx.shadowColor = '#fff3d4'; ctx.shadowBlur = 30; ctx.beginPath(); ctx.arc(W - 70, 110 + camY * 0.05, 26, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.save(); ctx.translate(0, camY);
+    // distant skyline
+    for (const b of skyline) { ctx.fillStyle = '#1a1830'; ctx.fillRect(b.x, GROUND - b.h, b.w, b.h); for (let y = GROUND - b.h + 8; y < GROUND - 6; y += 12) for (let x = b.x + 4; x < b.x + b.w - 4; x += 7) if (((x * 3 + y) | 0) % 7 === 0) { ctx.fillStyle = 'rgba(255,207,110,0.4)'; ctx.fillRect(x, y, 3, 4); } }
+    ctx.fillStyle = '#121022'; ctx.fillRect(0, GROUND, W, 400);
+    ctx.fillStyle = '#2a2640'; ctx.fillRect(0, GROUND, W, 3);
+    // tower
+    floors.forEach((f, i) => { if (i === 0) { ctx.fillStyle = '#3a3550'; ctx.fillRect(f.x - 8, GROUND - FH, f.w + 16, FH); ctx.fillStyle = '#ffcf6e'; ctx.fillRect(f.x + f.w / 2 - 10, GROUND - FH + 8, 20, FH - 8); return; } drawFloor(f, floorY(f.n), 1); });
+    if (flash > 0) { const f = floors[floors.length - 1]; ctx.strokeStyle = 'rgba(255,255,255,' + flash * 2 + ')'; ctx.lineWidth = 3; ctx.strokeRect(f.x - 3, floorY(f.n) - 3, f.w + 6, FH + 6); }
+    if (mover && state === 'play') drawFloor(mover, floorY(mover.n), 1);
+    for (const d of debris) { ctx.save(); ctx.translate(d.x + d.w / 2, d.y + FH / 2); ctx.rotate(d.rot); drawFloor({ x: -d.w / 2, w: d.w, n: d.n }, -FH / 2, 0.9); ctx.restore(); }
+    for (const p of parts) { ctx.globalAlpha = p.life / 0.6; ctx.fillStyle = p.c; ctx.fillRect(p.x, p.y, 3, 3); }
+    ctx.globalAlpha = 1;
+    ctx.font = '400 18px "Archivo Black", sans-serif'; ctx.textAlign = 'center';
+    for (const f of floatTxt) { ctx.globalAlpha = Math.min(1, f.life * 2); ctx.fillStyle = '#ffcf6e'; ctx.fillText(f.txt, W / 2, f.y); }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // HUD
+    if (state !== 'title') {
+      ctx.textAlign = 'center'; ctx.fillStyle = '#f5f1ea'; ctx.font = '400 54px "Archivo Black", sans-serif';
+      ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 10; ctx.fillText(String(floors.length - 1), W / 2, 82); ctx.shadowBlur = 0;
+      ctx.font = '600 13px Archivo, sans-serif'; ctx.fillStyle = '#9a97ad'; ctx.fillText('FLOORS  ·  BEST ' + best, W / 2, 104);
+    }
+  }
+
+  // ---------- input / loop ----------
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); drop(); });
+  addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (state === 'play') drop(); else if (!$('end').hidden || !$('title').hidden) start(); } });
+  function start() { reset(); state = 'play'; $('title').hidden = true; $('end').hidden = true; }
+  $('startBtn').addEventListener('click', start);
+  $('againBtn').addEventListener('click', start);
+  reset();
+  let last = performance.now();
+  (function loop(now) { const dt = Math.min(0.033, (now - last) / 1000); last = now; update(dt); render(); requestAnimationFrame(loop); })(last);
+})();
+</script>
+</body>
+</html>

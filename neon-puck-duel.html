@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neon Puck Duel</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Barlow:wght@400;600;700&display=swap">
+<style>
+/* Layout: portrait neon table centred on black; scores drawn on the table; mode picker and result as overlay cards. Single dark neon look by choice. */
+:root {
+  --bg: #04040a;
+  --ink: #f2f4ff;
+  --muted: #8a8fb3;
+  --p1: #3fe6ff;
+  --p2: #ff4f9a;
+  --puck: #fff27a;
+  --panel: rgba(12, 12, 26, 0.92);
+  --display: "Black Ops One", "Arial Black", system-ui, sans-serif;
+  --body: "Barlow", system-ui, -apple-system, Segoe UI, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-user-select: none; user-select: none; }
+#stage { position: fixed; inset: 0; display: grid; place-items: center; }
+canvas { display: block; touch-action: none; cursor: none; }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); background: rgba(2, 2, 8, 0.6); }
+.card { width: 100%; max-width: 400px; background: var(--panel); border: 1px solid #262a52; border-radius: 16px; padding: 24px; display: grid; gap: 12px; }
+.card h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(34px, 9vw, 48px); line-height: 1; background: linear-gradient(90deg, var(--p1), var(--puck), var(--p2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.card h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 32px; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
+.card p b { color: var(--ink); }
+.modes { display: grid; gap: 8px; }
+.mode { font: 700 15px var(--body); color: var(--ink); background: rgba(255,255,255,0.04); border: 1px solid #262a52; border-radius: 12px; padding: 12px 14px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+.mode span { color: var(--muted); font-weight: 400; font-size: 13px; }
+.mode:hover { border-color: var(--c); }
+.mode:focus-visible, .go:focus-visible { outline: 2px solid var(--c, var(--p1)); outline-offset: 2px; }
+.go { justify-self: start; font: 700 15px var(--body); color: #06060c; background: var(--p1); border: 0; border-radius: 10px; padding: 10px 20px; cursor: pointer; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.ghost { font: 600 14px var(--body); color: var(--ink); background: none; border: 1px solid #262a52; border-radius: 10px; padding: 10px 16px; cursor: pointer; }
+@media (pointer: coarse) { .keys-only { display: none; } }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div class="overlay" id="menu">
+    <div class="card">
+      <h1>Neon Puck Duel</h1>
+      <p>Knock the glowing puck into the other player's goal. <b>First to 7 wins.</b> You're <b style="color:var(--p1)">blue</b>, at the bottom.</p>
+      <p class="keys-only">Move your mallet with the mouse. In a two-player game the top player uses <b>W A S D</b>, or each player takes a half of a touch screen.</p>
+      <div class="modes">
+        <button class="mode" data-mode="easy" style="--c:#7cff8a">vs Computer · Easy <span>relaxed</span></button>
+        <button class="mode" data-mode="normal" style="--c:#fff27a">vs Computer · Normal <span>a fair match</span></button>
+        <button class="mode" data-mode="hard" style="--c:#ff4f9a">vs Computer · Hard <span>fast and sharp</span></button>
+        <button class="mode" data-mode="two" style="--c:#3fe6ff">2 Players <span>one screen</span></button>
+      </div>
+    </div>
+  </div>
+  <div class="overlay" id="end" hidden>
+    <div class="card">
+      <h2 id="eTitle">Blue wins!</h2>
+      <p id="eText"></p>
+      <div class="row"><button class="go" id="againBtn">Rematch</button><button class="ghost" id="menuBtn">Change mode</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const cv = $('c'), ctx = cv.getContext('2d');
+  const W = 480, H = 800, GOAL = 160, MR = 34, PR = 18, WIN = 7, PAD = 14;
+  let sc = 1;
+  function resize() { const dpr = Math.min(2, devicePixelRatio || 1); sc = Math.min(innerWidth / W, innerHeight / H); cv.style.width = W * sc + 'px'; cv.style.height = H * sc + 'px'; cv.width = Math.round(W * sc * dpr); cv.height = Math.round(H * sc * dpr); ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0); }
+  addEventListener('resize', resize); resize();
+
+  const AI = { easy: { speed: 380, react: 0.35, aim: 0.3 }, normal: { speed: 620, react: 0.18, aim: 0.6 }, hard: { speed: 900, react: 0.06, aim: 0.95 } };
+  let mode = 'normal', state = 'menu', t = 0, score = [0, 0], puck, m1, m2, parts = [], flash = null, serveT = 0, wins = { blue: 0, pink: 0 };
+  try { wins = Object.assign(wins, JSON.parse(localStorage.getItem('glowhockey') || '{}')); } catch (e) {}
+  const keys = {};
+
+  function resetPositions(serveTo) {
+    puck = { x: W / 2, y: H / 2 + (serveTo === 0 ? 60 : serveTo === 1 ? -60 : 0), vx: 0, vy: 0, trail: [] };
+    m1 = m1 || {}; m2 = m2 || {};
+    Object.assign(m1, { x: W / 2, y: H - 110, tx: W / 2, ty: H - 110, vx: 0, vy: 0 });
+    Object.assign(m2, { x: W / 2, y: 110, tx: W / 2, ty: 110, vx: 0, vy: 0, think: 0 });
+    serveT = 0.6;
+  }
+
+  // ---------- audio ----------
+  let actx = null;
+  function tone(f, d = 0.06, type = 'triangle', v = 0.12, glide = 1) {
+    try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const o = actx.createOscillator(), g = actx.createGain(), n = actx.currentTime;
+      o.type = type; o.frequency.setValueAtTime(f, n); o.frequency.exponentialRampToValueAtTime(f * glide, n + d); g.gain.setValueAtTime(v, n); g.gain.exponentialRampToValueAtTime(0.001, n + d);
+      o.connect(g).connect(actx.destination); o.start(n); o.stop(n + d + 0.02); } catch (e) {}
+  }
+  function sparks(x, y, col, n) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, v = 60 + Math.random() * 220; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.4 + Math.random() * 0.3, col }); } }
+
+  // ---------- physics ----------
+  function moveMallet(m, dt, top) {
+    const minY = top ? PAD + MR : H / 2 + MR, maxY = top ? H / 2 - MR : H - PAD - MR;
+    const tx = Math.max(PAD + MR, Math.min(W - PAD - MR, m.tx)), ty = Math.max(minY, Math.min(maxY, m.ty));
+    const nx = m.x + (tx - m.x) * Math.min(1, 30 * dt), ny = m.y + (ty - m.y) * Math.min(1, 30 * dt);
+    m.vx = (nx - m.x) / Math.max(dt, 1e-3); m.vy = (ny - m.y) / Math.max(dt, 1e-3); m.x = nx; m.y = ny;
+  }
+  function collide(m, col) {
+    const dx = puck.x - m.x, dy = puck.y - m.y, d = Math.hypot(dx, dy), min = MR + PR;
+    if (d >= min || d === 0) return;
+    const nx = dx / d, ny = dy / d;
+    puck.x = m.x + nx * min; puck.y = m.y + ny * min;
+    const rvx = puck.vx - m.vx, rvy = puck.vy - m.vy, vn = rvx * nx + rvy * ny;
+    if (vn < 0) { puck.vx -= 1.9 * vn * nx; puck.vy -= 1.9 * vn * ny; }
+    const sp = Math.hypot(puck.vx, puck.vy), max = 1500; if (sp > max) { puck.vx *= max / sp; puck.vy *= max / sp; }
+    tone(380 + Math.min(sp, 1500) * 0.3, 0.05, 'square', 0.07); sparks(puck.x - nx * PR, puck.y - ny * PR, col, 8);
+  }
+  function update(dt) {
+    t += dt;
+    for (const p of parts) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96; } parts = parts.filter(p => p.life > 0);
+    if (flash) { flash.life -= dt; if (flash.life <= 0) flash = null; }
+    if (state !== 'play') return;
+    // second player keys
+    if (mode === 'two') {
+      const k = 520 * dt;
+      if (keys.a) m2.tx -= k; if (keys.d) m2.tx += k; if (keys.w) m2.ty -= k; if (keys.s) m2.ty += k;
+    } else {
+      // computer
+      const ai = AI[mode]; m2.think -= dt;
+      if (m2.think <= 0) {
+        m2.think = ai.react;
+        if (puck.y < H / 2 + 40 && puck.vy < 200) {
+          // go for the puck, aiming slightly behind it so it shoots toward the blue goal
+          const aimX = W / 2 + (Math.random() - 0.5) * GOAL * (1 - ai.aim);
+          const ang = Math.atan2(H - puck.y, aimX - puck.x);
+          m2.goalX = puck.x - Math.cos(ang) * (MR + PR - 6); m2.goalY = puck.y - Math.sin(ang) * (MR + PR - 6);
+        } else { m2.goalX = W / 2 + (puck.x - W / 2) * 0.4; m2.goalY = 90; }
+      }
+      const dx = m2.goalX - m2.x, dy = m2.goalY - m2.y, d = Math.hypot(dx, dy), step = Math.min(d, ai.speed * dt);
+      if (d > 0.5) { m2.tx = m2.x + dx / d * step * 3; m2.ty = m2.y + dy / d * step * 3; }
+      if (d < step * 3) { m2.tx = m2.goalX; m2.ty = m2.goalY; }
+    }
+    moveMallet(m1, dt, false); moveMallet(m2, dt, true);
+    if (serveT > 0) { serveT -= dt; return; }
+    const sub = 4;
+    for (let i = 0; i < sub; i++) {
+      puck.x += puck.vx * dt / sub; puck.y += puck.vy * dt / sub;
+      const fr = Math.pow(0.55, dt / sub); puck.vx *= fr; puck.vy *= fr;
+      if (puck.x < PAD + PR) { puck.x = PAD + PR; puck.vx = Math.abs(puck.vx) * 0.9; tone(220, 0.03, 'triangle', 0.05); }
+      if (puck.x > W - PAD - PR) { puck.x = W - PAD - PR; puck.vx = -Math.abs(puck.vx) * 0.9; tone(220, 0.03, 'triangle', 0.05); }
+      const inGoal = Math.abs(puck.x - W / 2) < GOAL / 2 - PR * 0.3;
+      if (puck.y < PAD + PR) { if (inGoal) { if (puck.y < -PR) return goal(0); } else { puck.y = PAD + PR; puck.vy = Math.abs(puck.vy) * 0.9; tone(220, 0.03, 'triangle', 0.05); } }
+      if (puck.y > H - PAD - PR) { if (inGoal) { if (puck.y > H + PR) return goal(1); } else { puck.y = H - PAD - PR; puck.vy = -Math.abs(puck.vy) * 0.9; tone(220, 0.03, 'triangle', 0.05); } }
+      collide(m1, '#3fe6ff'); collide(m2, '#ff4f9a');
+    }
+    puck.trail.push([puck.x, puck.y]); if (puck.trail.length > 12) puck.trail.shift();
+  }
+  function goal(who) { // who = index of the scorer (0 blue, 1 pink)
+    score[who]++;
+    const col = who === 0 ? '#3fe6ff' : '#ff4f9a';
+    sparks(W / 2, who === 0 ? 0 : H, col, 50); flash = { col, life: 0.6, txt: (who === 0 ? 'BLUE' : 'PINK') + ' SCORES' };
+    tone(who === 0 ? 660 : 440, 0.4, 'sawtooth', 0.1, 1.5);
+    if (score[who] >= WIN) return finish(who);
+    resetPositions(who === 0 ? 1 : 0);
+  }
+  function finish(who) {
+    state = 'end';
+    const blue = who === 0;
+    if (mode !== 'two') { if (blue) wins.blue++; else wins.pink++; try { localStorage.setItem('glowhockey', JSON.stringify(wins)); } catch (e) {} }
+    setTimeout(() => {
+      $('eTitle').textContent = mode === 'two' ? (blue ? 'Blue wins!' : 'Pink wins!') : (blue ? 'You win!' : 'The computer wins');
+      $('eTitle').style.color = blue ? '#3fe6ff' : '#ff4f9a';
+      $('eText').textContent = score[0] + ' – ' + score[1] + '. ' + (mode === 'two' ? '' : 'Your record against the computer: ' + wins.blue + ' won, ' + wins.pink + ' lost.');
+      $('end').hidden = false; $('againBtn').focus();
+    }, 700);
+  }
+
+  // ---------- drawing ----------
+  function neonLine(draw, col, w) { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.shadowColor = col; ctx.shadowBlur = 14; draw(); ctx.stroke(); ctx.shadowBlur = 0; }
+  function mallet(m, col) {
+    ctx.save(); ctx.translate(m.x, m.y);
+    const g = ctx.createRadialGradient(0, 0, 4, 0, 0, MR * 1.8); g.addColorStop(0, col + '55'); g.addColorStop(1, col + '00'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, MR * 1.8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#0b0b18'; ctx.beginPath(); ctx.arc(0, 0, MR, 0, 7); ctx.fill();
+    neonLine(() => { ctx.beginPath(); ctx.arc(0, 0, MR - 3, 0, 7); }, col, 5);
+    neonLine(() => { ctx.beginPath(); ctx.arc(0, 0, MR * 0.45, 0, 7); }, col, 3);
+    ctx.restore();
+  }
+  function render() {
+    ctx.fillStyle = '#06060e'; ctx.fillRect(0, 0, W, H);
+    // table markings
+    ctx.globalAlpha = 0.55;
+    neonLine(() => { ctx.beginPath(); ctx.moveTo(PAD, H / 2); ctx.lineTo(W - PAD, H / 2); }, '#7a7fff', 2);
+    neonLine(() => { ctx.beginPath(); ctx.arc(W / 2, H / 2, 70, 0, 7); }, '#7a7fff', 2);
+    neonLine(() => { ctx.beginPath(); ctx.arc(W / 2, PAD, 110, 0, Math.PI); }, '#ff4f9a', 2);
+    neonLine(() => { ctx.beginPath(); ctx.arc(W / 2, H - PAD, 110, Math.PI, 0); }, '#3fe6ff', 2);
+    ctx.globalAlpha = 1;
+    // rails with goal gaps
+    const gl = W / 2 - GOAL / 2, gr = W / 2 + GOAL / 2;
+    neonLine(() => { ctx.beginPath(); ctx.moveTo(gl, PAD); ctx.lineTo(PAD, PAD); ctx.lineTo(PAD, H - PAD); ctx.lineTo(gl, H - PAD); ctx.moveTo(gr, PAD); ctx.lineTo(W - PAD, PAD); ctx.lineTo(W - PAD, H - PAD); ctx.lineTo(gr, H - PAD); }, '#cfd3ff', 4);
+    neonLine(() => { ctx.beginPath(); ctx.moveTo(gl, PAD); ctx.lineTo(gr, PAD); }, '#ff4f9a', 6);
+    neonLine(() => { ctx.beginPath(); ctx.moveTo(gl, H - PAD); ctx.lineTo(gr, H - PAD); }, '#3fe6ff', 6);
+    // scores
+    ctx.font = '400 72px "Black Ops One", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.globalAlpha = 0.18; ctx.fillStyle = '#ff4f9a'; ctx.fillText(score[1], W / 2, H / 2 - 150); ctx.fillStyle = '#3fe6ff'; ctx.fillText(score[0], W / 2, H / 2 + 150); ctx.globalAlpha = 1;
+    // puck
+    if (puck) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      puck.trail.forEach(([x, y], i) => { const a = i / puck.trail.length; ctx.fillStyle = 'rgba(255,242,122,' + a * 0.3 + ')'; ctx.beginPath(); ctx.arc(x, y, PR * a, 0, 7); ctx.fill(); });
+      ctx.restore();
+      ctx.fillStyle = '#fff27a'; ctx.shadowColor = '#fff27a'; ctx.shadowBlur = 24; ctx.beginPath(); ctx.arc(puck.x, puck.y, PR, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.arc(puck.x, puck.y, PR * 0.55, 0, 7); ctx.fill();
+    }
+    if (m2) mallet(m2, '#ff4f9a'); if (m1) mallet(m1, '#3fe6ff');
+    for (const p of parts) { ctx.globalAlpha = Math.max(0, p.life * 2); ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, 3, 3); } ctx.globalAlpha = 1;
+    if (flash) { ctx.globalAlpha = Math.min(1, flash.life * 2); ctx.font = '400 40px "Black Ops One", sans-serif'; ctx.fillStyle = flash.col; ctx.shadowColor = flash.col; ctx.shadowBlur = 20; ctx.fillText(flash.txt, W / 2, H / 2); ctx.shadowBlur = 0; ctx.globalAlpha = 1; }
+    if (state === 'play' && mode === 'two' && t < 4) { ctx.font = '600 14px Barlow, sans-serif'; ctx.fillStyle = 'rgba(242,244,255,0.6)'; ctx.fillText('Pink: W A S D or touch the top half', W / 2, 60); ctx.fillText('Blue: mouse or touch the bottom half', W / 2, H - 60); }
+  }
+
+  // ---------- input ----------
+  const toLocal = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; };
+  const owner = new Map(); // pointerId -> mallet
+  function steer(e) {
+    const p = toLocal(e);
+    let m = owner.get(e.pointerId);
+    if (!m) m = (mode === 'two' && p.y < H / 2) ? m2 : m1;
+    if (e.type === 'pointerdown') owner.set(e.pointerId, m);
+    if (!m) return;
+    m.tx = p.x; m.ty = p.y;
+  }
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); if (e.pointerType !== 'mouse') cv.setPointerCapture(e.pointerId); steer(e); });
+  cv.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || owner.has(e.pointerId)) steer(e); });
+  const up = e => owner.delete(e.pointerId);
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (e.key === 'Escape' && state === 'play') { state = 'menu'; $('menu').hidden = false; } });
+  addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  function start(md) { mode = md; score = [0, 0]; parts = []; flash = null; resetPositions(-1); state = 'play'; $('menu').hidden = true; $('end').hidden = true; }
+  document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => start(b.dataset.mode)));
+  $('againBtn').addEventListener('click', () => start(mode));
+  $('menuBtn').addEventListener('click', () => { $('end').hidden = true; $('menu').hidden = false; state = 'menu'; });
+  resetPositions(-1);
+  let last = performance.now();
+  (function loop(now) { const dt = Math.max(0, Math.min(0.033, (now - last) / 1000)); last = now; update(dt); render(); requestAnimationFrame(loop); })(last);
+})();
+</script>
+</body>
+</html>

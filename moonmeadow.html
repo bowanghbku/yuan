@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Moonmeadow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;600;700&display=swap">
+<style>
+/* Layout: full-screen night world canvas; "you are" badge top-left, journal of 16 forms along the bottom, title/completion cards centred. Single moonlit look by choice. */
+:root {
+  --night: #070b14;
+  --moon: #f4ecc8;
+  --glow: #9ff0d0;
+  --ink: #eef1f6;
+  --muted: #8e9ab0;
+  --panel: rgba(10, 14, 26, 0.82);
+  --display: "Young Serif", Georgia, serif;
+  --body: "Figtree", system-ui, -apple-system, Segoe UI, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-user-select: none; user-select: none; }
+#stage { position: fixed; inset: 0; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.badge { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); max-width: calc(100% - 32px); box-sizing: border-box;
+  background: var(--panel); border: 1px solid rgba(159, 240, 208, 0.25); border-radius: 12px; padding: 10px 14px; pointer-events: none; }
+.badge .you { font-family: var(--display); font-size: 22px; color: var(--moon); }
+.badge .you b { font-weight: 400; color: var(--glow); text-shadow: 0 0 12px rgba(159, 240, 208, 0.6); }
+.badge .how { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.journal { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); pointer-events: none; }
+.journal .lbl { width: 100%; text-align: center; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.chip { font-size: 12px; padding: 4px 9px; border-radius: 999px; border: 1px solid rgba(142, 154, 176, 0.3); color: rgba(142, 154, 176, 0.6); background: rgba(10, 14, 26, 0.6); }
+.chip.got { color: var(--night); background: var(--c); border-color: var(--c); box-shadow: 0 0 10px var(--c); font-weight: 600; }
+.chip.now { outline: 2px solid var(--moon); outline-offset: 1px; }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); background: rgba(4, 6, 12, 0.55); }
+.card { width: 100%; max-width: 470px; background: var(--panel); border: 1px solid rgba(244, 236, 200, 0.25); border-radius: 16px; padding: 26px; display: grid; gap: 13px; backdrop-filter: blur(4px); }
+.card h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(38px, 9vw, 58px); line-height: 1; color: var(--moon); text-shadow: 0 0 26px rgba(244, 236, 200, 0.45); }
+.card h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 28px; color: var(--glow); }
+.card p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--muted); }
+.card p b { color: var(--ink); }
+.go { justify-self: start; font: 700 15px var(--body); color: var(--night); background: var(--moon); border: 0; border-radius: 10px; padding: 11px 20px; cursor: pointer; box-shadow: 0 0 20px rgba(244, 236, 200, 0.4); }
+.go:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
+.toast { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); font-family: var(--display); font-size: clamp(24px, 5vw, 38px); color: var(--moon); text-shadow: 0 0 18px rgba(244, 236, 200, 0.7); pointer-events: none; transition: opacity 0.6s; white-space: nowrap; }
+@media (pointer: coarse) { .keys-only { display: none; } }
+@media (pointer: fine) { .touch-only { display: none; } }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div class="badge"><div class="you">You are a <b id="you">Firefly</b></div><div class="how" id="how"></div></div>
+  <div class="toast" id="toast" style="opacity:0"></div>
+  <div class="journal" id="journal"></div>
+
+  <div class="overlay" id="intro">
+    <div class="card">
+      <h1>Moonmeadow</h1>
+      <p>A quiet night meadow by a lake. You start as a tiny firefly, but you can <b>become anything nearby</b>: a fox, an owl, a fish, a tree, even a rock or a cloud.</p>
+      <p>Each thing moves its own way. Fish can only swim, deer can't cross water, trees and rocks stand still but can reach further to jump into something else. Fill your journal by being all 16 things.</p>
+      <p class="keys-only"><b>Move</b> with arrow keys or WASD. <b>Become</b> something glowing near you by clicking it, or press Space for the closest one.</p>
+      <p class="touch-only"><b>Tap</b> the ground to move there. <b>Tap</b> something glowing near you to become it.</p>
+      <button class="go" id="startBtn">Wander in</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="done" hidden>
+    <div class="card">
+      <h2>You've been everything</h2>
+      <p>Firefly to cloud, fox to fish: you've been all 16 things in Moonmeadow. Keep wandering as long as you like.</p>
+      <button class="go" id="keepBtn">Keep wandering</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const cv = $('c'), ctx = cv.getContext('2d');
+  let VW = 0, VH = 0, zoom = 1, dpr = 1;
+  function resize() {
+    dpr = Math.min(2, devicePixelRatio || 1);
+    VW = innerWidth; VH = innerHeight;
+    cv.width = VW * dpr; cv.height = VH * dpr;
+    zoom = Math.max(0.7, Math.min(1.25, Math.min(VW / 1000, VH / 640)));
+  }
+  addEventListener('resize', resize); resize();
+
+  // ---------- world ----------
+  const WW = 3200, WH = 2200, CELL = 20, GW = WW / CELL, GH = WH / CELL;
+  let seed = 2026;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const P = new Float32Array(512).map(() => rnd());
+  const hash = (x, y) => P[(x * 31 + y * 57 + ((x * y) & 255)) & 511];
+  function vnoise(x, y) {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const s = t => t * t * (3 - 2 * t);
+    const a = hash(xi & 255, yi & 255), b = hash((xi + 1) & 255, yi & 255), c = hash(xi & 255, (yi + 1) & 255), d = hash((xi + 1) & 255, (yi + 1) & 255);
+    return (a + (b - a) * s(xf)) + ((c + (d - c) * s(xf)) - (a + (b - a) * s(xf))) * s(yf);
+  }
+  const fbm = (x, y) => vnoise(x, y) * 0.55 + vnoise(x * 2.1, y * 2.1) * 0.28 + vnoise(x * 4.3, y * 4.3) * 0.17 - 0.5;
+  // 0 water, 1 sand, 2 grass, 3 forest, 4 rock
+  function heightAt(x, y) {
+    // one big lake near the middle plus noise
+    const dx = (x - WW * 0.52) / (WW * 0.24), dy = (y - WH * 0.55) / (WH * 0.24);
+    const lake = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy));
+    const edge = Math.min(x, y, WW - x, WH - y) < 140 ? 0.6 : 0;
+    return fbm(x / 520, y / 520) - lake * 0.75 + edge;
+  }
+  const T = new Uint8Array(GW * GH), HGT = new Float32Array(GW * GH);
+  for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
+    const x = gx * CELL + CELL / 2, y = gy * CELL + CELL / 2, h = heightAt(x, y), m = fbm(x / 380 + 40, y / 380 + 17);
+    HGT[gy * GW + gx] = h;
+    T[gy * GW + gx] = h < -0.2 ? 0 : h < -0.14 ? 1 : h > 0.27 ? 4 : m > 0.06 ? 3 : 2;
+  }
+  const terr = (x, y) => { const gx = Math.floor(x / CELL), gy = Math.floor(y / CELL); if (gx < 0 || gy < 0 || gx >= GW || gy >= GH) return -1; return T[gy * GW + gx]; };
+
+  // pre-render ground at half resolution
+  const GS = 3; // ground texture: 1 pixel per 3 world px, classified per pixel so shores are smooth
+  const ground = document.createElement('canvas'); ground.width = Math.ceil(WW / GS); ground.height = Math.ceil(WH / GS);
+  (() => {
+    const g = ground.getContext('2d'), img = g.createImageData(ground.width, ground.height), d = img.data;
+    const pal = [[14, 32, 58], [58, 54, 44], [22, 46, 34], [14, 34, 26], [44, 46, 54]];
+    for (let y = 0; y < ground.height; y++) for (let x = 0; x < ground.width; x++) {
+      const wx = x * GS, wy = y * GS, h = heightAt(wx, wy), m = fbm(wx / 380 + 40, wy / 380 + 17);
+      const t = h < -0.2 ? 0 : h < -0.14 ? 1 : h > 0.27 ? 4 : m > 0.06 ? 3 : 2;
+      const base = pal[t];
+      const shade = t === 0 ? 1 + h * 1.2 : 1 + h * 0.6 + (vnoise(wx / 9, wy / 9) - 0.5) * 0.12;
+      const i = (y * ground.width + x) * 4;
+      d[i] = base[0] * shade; d[i + 1] = base[1] * shade; d[i + 2] = base[2] * shade; d[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  })();
+
+  // ---------- forms ----------
+  const LAND = [1, 2, 3, 4], WATER = [0], BOTH = [0, 1, 2, 3, 4], AIR = 'air';
+  const FORMS = {
+    firefly:  { name: 'Firefly',  move: AIR,  speed: 110, r: 5,  col: '#f6f27a', on: [2, 3], n: 40, reach: 130 },
+    moth:     { name: 'Moth',     move: AIR,  speed: 120, r: 9,  col: '#e9ddc0', on: [2, 3], n: 14, reach: 140 },
+    owl:      { name: 'Owl',      move: AIR,  speed: 190, r: 15, col: '#c99f6a', on: [3], n: 6, reach: 160 },
+    cloud:    { name: 'Cloud',    move: AIR,  speed: 55,  r: 70, col: '#cfd8ea', on: BOTH, n: 7, reach: 260, high: true },
+    rabbit:   { name: 'Rabbit',   move: LAND, speed: 170, r: 10, col: '#cfc6bd', on: [2], n: 14, reach: 140, hop: true },
+    fox:      { name: 'Fox',      move: LAND, speed: 175, r: 14, col: '#ff9a4a', on: [2, 3], n: 6, reach: 150 },
+    deer:     { name: 'Deer',     move: LAND, speed: 150, r: 18, col: '#c8925a', on: [2, 3], n: 7, reach: 160 },
+    hedgehog: { name: 'Hedgehog', move: LAND, speed: 70,  r: 10, col: '#a88e72', on: [3], n: 8, reach: 130 },
+    frog:     { name: 'Frog',     move: BOTH, speed: 105, r: 9,  col: '#7ee06a', on: [1], n: 14, reach: 130, hop: true },
+    turtle:   { name: 'Turtle',   move: BOTH, speed: 55,  r: 14, col: '#6fbf8a', on: [1, 0], n: 7, reach: 140 },
+    duck:     { name: 'Duck',     move: BOTH, speed: 95,  r: 12, col: '#e8eef2', on: [0], n: 9, reach: 140 },
+    fish:     { name: 'Fish',     move: WATER, speed: 160, r: 10, col: '#7ec8ff', on: [0], n: 18, reach: 140 },
+    flower:   { name: 'Moonflower', move: null, speed: 0, r: 9,  col: '#c79bff', on: [2], n: 40, reach: 230 },
+    mushroom: { name: 'Glowcap',  move: null, speed: 0,  r: 9,  col: '#5ad8ff', on: [3], n: 30, reach: 230 },
+    rock:     { name: 'Rock',     move: null, speed: 0,  r: 20, col: '#9aa0ad', on: [4], n: 22, reach: 260 },
+    tree:     { name: 'Tree',     move: null, speed: 0,  r: 34, col: '#4fb07a', on: [3], n: 70, reach: 260, canopy: true }
+  };
+  const ORDER = Object.keys(FORMS);
+  const allowed = (f, x, y) => { const F = FORMS[f]; if (F.move === AIR) return x > 20 && y > 20 && x < WW - 20 && y < WH - 20; if (!F.move) return false; return F.move.includes(terr(x, y)); };
+
+  const things = [];
+  seed = 777;
+  for (const f of ORDER) {
+    const F = FORMS[f];
+    let placed = 0, guard = 0;
+    while (placed < F.n && guard++ < 40000) {
+      const x = 60 + rnd() * (WW - 120), y = 60 + rnd() * (WH - 120);
+      if (!F.on.includes(terr(x, y))) continue;
+      if (F.r > 15 && things.some(t => FORMS[t.f].r > 15 && Math.hypot(t.x - x, t.y - y) < F.r + FORMS[t.f].r)) continue;
+      things.push({ f, x, y, a: rnd() * 6.28, tx: x, ty: y, wait: rnd() * 3, ph: rnd() * 6.28, vx: 0, vy: 0, hopT: 0 });
+      placed++;
+    }
+  }
+  // start as a firefly near the lake shore
+  let me = things.filter(t => t.f === 'firefly').sort((a, b) => Math.hypot(a.x - WW * 0.4, a.y - WH * 0.5) - Math.hypot(b.x - WW * 0.4, b.y - WH * 0.5))[0];
+  const seen = new Set([me.f]);
+  let camX = me.x, camY = me.y, t = 0, playing = false, moveTo = null, hover = null, sparks = [];
+  try { JSON.parse(localStorage.getItem('moonmeadow-seen') || '[]').forEach(f => seen.add(f)); } catch (e) {}
+
+  // ---------- journal / badge ----------
+  function ui() {
+    $('you').textContent = FORMS[me.f].name;
+    const F = FORMS[me.f];
+    $('how').textContent = !F.move ? 'You can\'t move, but you can reach far. Become something nearby.' :
+      F.move === AIR ? 'You can fly anywhere.' : F.move === WATER ? 'You can only swim in water.' : F.move === LAND ? 'You walk on land. Water stops you.' : 'You can walk and swim.';
+    const j = $('journal'); j.innerHTML = '<div class="lbl">Journal · ' + seen.size + ' / 16</div>';
+    for (const f of ORDER) { const s = document.createElement('span'); s.className = 'chip' + (seen.has(f) ? ' got' : '') + (f === me.f ? ' now' : ''); s.style.setProperty('--c', FORMS[f].col); s.textContent = seen.has(f) ? FORMS[f].name : '?'; j.appendChild(s); }
+  }
+  let toastT = 0;
+  function toast(msg) { const el = $('toast'); el.textContent = msg; el.style.opacity = 1; clearTimeout(toastT); toastT = setTimeout(() => el.style.opacity = 0, 1600); }
+
+  function become(o) {
+    if (!o || o === me) return;
+    for (let i = 0; i < 24; i++) sparks.push({ x: me.x + (o.x - me.x) * (i / 24), y: me.y + (o.y - me.y) * (i / 24), life: 0.4 + i / 40, c: FORMS[o.f].col });
+    const fresh = !seen.has(o.f);
+    me = o; seen.add(o.f); moveTo = null;
+    try { localStorage.setItem('moonmeadow-seen', JSON.stringify([...seen])); } catch (e) {}
+    toast((fresh ? 'New! ' : '') + 'You are a ' + FORMS[o.f].name);
+    ui();
+    if (fresh && seen.size === 16) setTimeout(() => { $('done').hidden = false; }, 900);
+  }
+  const reach = () => FORMS[me.f].reach;
+  const inReach = o => o !== me && Math.hypot(o.x - me.x, o.y - me.y) < reach() + FORMS[o.f].r;
+
+  // ---------- input ----------
+  const keys = {};
+  addEventListener('keydown', e => {
+    const k = e.key.toLowerCase(); keys[k] = true;
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+    if ((k === ' ' || k === 'e') && playing) { const near = things.filter(inReach).sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y)); become(near.find(o => o.f !== me.f) || near[0]); }
+  });
+  addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+  const toWorld = (sx, sy) => ({ x: camX + (sx - VW / 2) / zoom, y: camY + (sy - VH / 2) / zoom });
+  function pick(w) {
+    let best = null, bd = 1e9;
+    for (const o of things) { if (o === me) continue; const d = Math.hypot(o.x - w.x, o.y - w.y); if (d < FORMS[o.f].r + 14 && d < bd) { best = o; bd = d; } }
+    return best;
+  }
+  cv.addEventListener('pointermove', e => { hover = pick(toWorld(e.clientX, e.clientY)); });
+  cv.addEventListener('pointerdown', e => {
+    if (!playing) return;
+    const w = toWorld(e.clientX, e.clientY), o = pick(w);
+    if (o && inReach(o)) become(o); else if (FORMS[me.f].move) moveTo = w;
+  });
+
+  // ---------- update ----------
+  function tryMove(o, nx, ny) {
+    if (allowed(o.f, nx, o.y)) o.x = nx;
+    if (allowed(o.f, o.x, ny)) o.y = ny;
+  }
+  function update(dt) {
+    t += dt;
+    for (const o of things) {
+      const F = FORMS[o.f];
+      if (!F.move) continue;
+      let ix = 0, iy = 0;
+      if (o === me && playing) {
+        if (keys.arrowleft || keys.a) ix -= 1; if (keys.arrowright || keys.d) ix += 1;
+        if (keys.arrowup || keys.w) iy -= 1; if (keys.arrowdown || keys.s) iy += 1;
+        if (ix || iy) moveTo = null;
+        else if (moveTo) { const dx = moveTo.x - o.x, dy = moveTo.y - o.y, d = Math.hypot(dx, dy); if (d > 6) { ix = dx / d; iy = dy / d; } else moveTo = null; }
+      } else {
+        o.wait -= dt;
+        if (o.wait <= 0) {
+          const rng = F.move === AIR ? 260 : 180;
+          for (let k = 0; k < 8; k++) { const tx = o.x + (Math.random() - 0.5) * rng * 2, ty = o.y + (Math.random() - 0.5) * rng * 2; if (allowed(o.f, tx, ty)) { o.tx = tx; o.ty = ty; break; } }
+          o.wait = 2 + Math.random() * 5;
+        }
+        const dx = o.tx - o.x, dy = o.ty - o.y, d = Math.hypot(dx, dy);
+        if (d > 8) { ix = dx / d * 0.45; iy = dy / d * 0.45; }
+        if (o.f === 'firefly' || o.f === 'moth') { ix += Math.sin(t * 3 + o.ph) * 0.3; iy += Math.cos(t * 2.6 + o.ph) * 0.3; }
+      }
+      const len = Math.hypot(ix, iy);
+      if (len > 1) { ix /= len; iy /= len; }
+      let sp = F.speed;
+      if (F.hop) { o.hopT += dt * (len > 0.05 ? 4 : 0); sp *= 0.5 + Math.max(0, Math.sin(o.hopT * Math.PI)) * 1.2; }
+      if (o.f === 'duck' || o.f === 'turtle') sp *= terr(o.x, o.y) === 0 ? 1.15 : 0.6;
+      o.vx += (ix * sp - o.vx) * Math.min(1, 6 * dt); o.vy += (iy * sp - o.vy) * Math.min(1, 6 * dt);
+      if (Math.hypot(o.vx, o.vy) > 4) o.a = Math.atan2(o.vy, o.vx);
+      tryMove(o, o.x + o.vx * dt, o.y + o.vy * dt);
+    }
+    camX += (me.x - camX) * Math.min(1, 5 * dt); camY += (me.y - camY) * Math.min(1, 5 * dt);
+    const hw = VW / 2 / zoom, hh = VH / 2 / zoom;
+    camX = Math.max(hw, Math.min(WW - hw, camX)); camY = Math.max(hh, Math.min(WH - hh, camY));
+    for (const s of sparks) s.life -= dt; sparks = sparks.filter(s => s.life > 0);
+  }
+
+  // ---------- drawing ----------
+  function drawThing(o, now) {
+    const F = FORMS[o.f], c = F.col;
+    ctx.save(); ctx.translate(o.x, o.y);
+    const lift = F.hop ? -Math.max(0, Math.sin(o.hopT * Math.PI)) * 5 : 0;
+    switch (o.f) {
+      case 'firefly': {
+        const b = 0.55 + Math.sin(now / 300 + o.ph * 3) * 0.45;
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 22); g.addColorStop(0, 'rgba(246,242,122,' + 0.55 * b + ')'); g.addColorStop(1, 'rgba(246,242,122,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 22, 0, 7); ctx.fill();
+        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(0, 0, 3 + b, 0, 7); ctx.fill(); break;
+      }
+      case 'moth': {
+        ctx.rotate(o.a + Math.PI / 2); const f = Math.abs(Math.sin(now / 70 + o.ph));
+        ctx.fillStyle = 'rgba(233,221,192,0.85)';
+        ctx.beginPath(); ctx.ellipse(-5 * f - 2, 0, 6 * f + 1, 7, -0.3, 0, 7); ctx.ellipse(5 * f + 2, 0, 6 * f + 1, 7, 0.3, 0, 7); ctx.fill();
+        ctx.fillStyle = '#6b5a44'; ctx.fillRect(-1.2, -5, 2.4, 10); break;
+      }
+      case 'owl': {
+        ctx.rotate(o.a + Math.PI / 2); const f = Math.sin(now / 160 + o.ph) * 0.3;
+        ctx.fillStyle = '#8a6a44'; ctx.beginPath(); ctx.ellipse(-14, 2, 13, 6, -0.4 + f, 0, 7); ctx.ellipse(14, 2, 13, 6, 0.4 - f, 0, 7); ctx.fill();
+        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(0, 0, 10, 0, 7); ctx.fill();
+        ctx.fillStyle = '#ffe48a'; ctx.beginPath(); ctx.arc(-4, -4, 3, 0, 7); ctx.arc(4, -4, 3, 0, 7); ctx.fill();
+        ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(-4, -4, 1.4, 0, 7); ctx.arc(4, -4, 1.4, 0, 7); ctx.fill(); break;
+      }
+      case 'cloud': break; // drawn in the sky layer
+      case 'rabbit': {
+        ctx.translate(0, lift); ctx.rotate(o.a + Math.PI / 2);
+        ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 3, 7, 9, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(0, -7, 5, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-3, -15, 2, 6, -0.2, 0, 7); ctx.ellipse(3, -15, 2, 6, 0.2, 0, 7); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 12, 3, 0, 7); ctx.fill(); break;
+      }
+      case 'fox': {
+        ctx.rotate(o.a + Math.PI / 2); const w = Math.sin(now / 200 + o.ph) * 0.3;
+        ctx.fillStyle = c; ctx.save(); ctx.translate(0, 10); ctx.rotate(w); ctx.beginPath(); ctx.ellipse(0, 8, 5, 10, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 16, 3.5, 0, 7); ctx.fill(); ctx.restore();
+        ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 2, 7, 11, 0, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-7, -8); ctx.lineTo(0, -20); ctx.lineTo(7, -8); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-6, -10); ctx.lineTo(-7, -17); ctx.lineTo(-2, -12); ctx.moveTo(6, -10); ctx.lineTo(7, -17); ctx.lineTo(2, -12); ctx.fill(); break;
+      }
+      case 'deer': {
+        ctx.rotate(o.a + Math.PI / 2);
+        ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 4, 9, 15, 0, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(0, -14, 5, 7, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.35)'; for (const [sx, sy] of [[-3, 0], [3, 4], [-2, 8]]) { ctx.beginPath(); ctx.arc(sx, sy, 1.5, 0, 7); ctx.fill(); }
+        ctx.strokeStyle = '#e8d5b0'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(-3, -18); ctx.lineTo(-10, -26); ctx.lineTo(-14, -24); ctx.moveTo(-8, -23); ctx.lineTo(-9, -30); ctx.moveTo(3, -18); ctx.lineTo(10, -26); ctx.lineTo(14, -24); ctx.moveTo(8, -23); ctx.lineTo(9, -30); ctx.stroke(); break;
+      }
+      case 'hedgehog': {
+        ctx.rotate(o.a + Math.PI / 2);
+        ctx.fillStyle = '#5a4634'; for (let i = 0; i < 14; i++) { const a = Math.PI * 0.15 + i / 13 * Math.PI * 1.7; ctx.beginPath(); ctx.moveTo(Math.cos(a + Math.PI / 2) * 8, Math.sin(a + Math.PI / 2) * 9 + 2); ctx.lineTo(Math.cos(a + Math.PI / 2) * 13, Math.sin(a + Math.PI / 2) * 14 + 2); ctx.lineTo(Math.cos(a + 0.2 + Math.PI / 2) * 8, Math.sin(a + 0.2 + Math.PI / 2) * 9 + 2); ctx.fill(); }
+        ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 2, 8, 10, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#e2cdb2'; ctx.beginPath(); ctx.ellipse(0, -8, 4, 5, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(0, -12, 1.5, 0, 7); ctx.fill(); break;
+      }
+      case 'frog': {
+        ctx.translate(0, lift); ctx.rotate(o.a + Math.PI / 2);
+        ctx.fillStyle = '#4ea044'; ctx.beginPath(); ctx.ellipse(-8, 6, 4, 6, 0.6, 0, 7); ctx.ellipse(8, 6, 4, 6, -0.6, 0, 7); ctx.fill();
+        ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, 8, 9, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-4, -7, 3, 0, 7); ctx.arc(4, -7, 3, 0, 7); ctx.fill();
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(-4, -7, 1.5, 0, 7); ctx.arc(4, -7, 1.5, 0, 7); ctx.fill(); break;
+      }
+      case 'turtle': {
+        ctx.rotate(o.a + Math.PI / 2);
+        ctx.fillStyle = '#4d8a5f'; ctx.beginPath(); ctx.arc(0, -15, 4.5, 0, 7); ctx.fill();
+        for (const [lx, ly] of [[-11, -8], [11, -8], [-10, 9], [10, 9]]) { ctx.beginPath(); ctx.ellipse(lx, ly, 4, 3, 0, 0, 7); ctx.fill(); }
+        ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, 11, 13, 0, 0, 7); ctx.fill();
+        ctx.strokeStyle = 'rgba(20,50,30,0.6)'; ctx.lineWidth = 1.2; ctx.beginPath();
+        for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.lineTo(Math.cos(a) * 5, Math.sin(a) * 6); } ctx.closePath(); ctx.stroke(); break;
+      }
+      case 'duck': {
+        ctx.rotate(o.a + Math.PI / 2);
+        if (terr(o.x, o.y) === 0) { ctx.strokeStyle = 'rgba(200,230,255,0.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(0, 4, 15 + Math.sin(now / 300) * 2, 0.3, Math.PI - 0.3); ctx.stroke(); }
+        ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 3, 8, 11, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#2f7a55'; ctx.beginPath(); ctx.arc(0, -8, 5, 0, 7); ctx.fill();
+        ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.ellipse(0, -14, 2.5, 3.5, 0, 0, 7); ctx.fill(); break;
+      }
+      case 'fish': {
+        ctx.rotate(o.a); const w = Math.sin(now / 120 + o.ph) * 0.4;
+        ctx.globalAlpha = 0.9; ctx.fillStyle = c;
+        ctx.beginPath(); ctx.ellipse(0, 0, 11, 5, 0, 0, 7); ctx.fill();
+        ctx.save(); ctx.translate(-10, 0); ctx.rotate(w); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-8, -6); ctx.lineTo(-8, 6); ctx.closePath(); ctx.fill(); ctx.restore();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(6, -1.5, 1.4, 0, 7); ctx.fill(); break;
+      }
+      case 'flower': {
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 20); g.addColorStop(0, 'rgba(199,155,255,0.35)'); g.addColorStop(1, 'rgba(199,155,255,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 20, 0, 7); ctx.fill();
+        ctx.fillStyle = c; ctx.rotate(Math.sin(now / 900 + o.ph) * 0.2);
+        for (let i = 0; i < 5; i++) { ctx.rotate(Math.PI * 2 / 5); ctx.beginPath(); ctx.ellipse(0, -5, 3, 5, 0, 0, 7); ctx.fill(); }
+        ctx.fillStyle = '#fff6c4'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, 7); ctx.fill(); break;
+      }
+      case 'mushroom': {
+        const p = 0.7 + Math.sin(now / 700 + o.ph) * 0.3;
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 24); g.addColorStop(0, 'rgba(90,216,255,' + 0.4 * p + ')'); g.addColorStop(1, 'rgba(90,216,255,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 24, 0, 7); ctx.fill();
+        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(0, 0, 8, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.7)'; for (const [sx, sy] of [[-3, -2], [3, 1], [0, 4]]) { ctx.beginPath(); ctx.arc(sx, sy, 1.4, 0, 7); ctx.fill(); } break;
+      }
+      case 'rock': {
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(4, 5, 20, 14, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = '#6a6f7c'; ctx.beginPath();
+        for (let i = 0; i < 9; i++) { const a = i / 9 * 6.283, r = 18 + Math.sin(i * 2.7 + o.ph) * 3; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r * 0.8); } ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(200,210,230,0.25)'; ctx.beginPath(); ctx.ellipse(-5, -5, 8, 5, -0.4, 0, 7); ctx.fill(); break;
+      }
+      case 'tree': break; // canopy layer
+    }
+    ctx.restore();
+  }
+  function drawTree(o, now) {
+    const s = 1 + Math.sin(now / 1400 + o.ph) * 0.02;
+    ctx.save(); ctx.translate(o.x, o.y); ctx.scale(s, s);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(8, 10, 34, 0, 7); ctx.fill();
+    ctx.fillStyle = '#1f4a34'; ctx.beginPath(); ctx.arc(0, 0, 34, 0, 7); ctx.fill();
+    ctx.fillStyle = '#2b6145'; for (const [bx, by, br] of [[-12, -8, 18], [12, -6, 17], [0, 12, 18], [-4, -2, 16]]) { ctx.beginPath(); ctx.arc(bx, by, br, 0, 7); ctx.fill(); }
+    ctx.fillStyle = 'rgba(244,236,200,0.08)'; ctx.beginPath(); ctx.arc(-10, -12, 14, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  function drawCloud(o) {
+    ctx.save(); ctx.translate(o.x, o.y); ctx.globalAlpha = o === me ? 0.75 : 0.42;
+    ctx.fillStyle = '#cfd8ea';
+    for (const [bx, by, br] of [[-40, 6, 30], [-10, -8, 38], [26, 0, 32], [52, 10, 22], [-60, 14, 18]]) { ctx.beginPath(); ctx.arc(bx, by, br, 0, 7); ctx.fill(); }
+    ctx.restore();
+  }
+  function ring(o, col, w, alpha) {
+    const F = FORMS[o.f]; const r = (o.f === 'cloud' ? 60 : F.r + 8);
+    ctx.strokeStyle = col; ctx.globalAlpha = alpha; ctx.lineWidth = w; ctx.beginPath(); ctx.arc(o.x, o.y, r, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+
+  function render(now) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#070b14'; ctx.fillRect(0, 0, VW, VH);
+    ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * (VW / 2 - camX * zoom), dpr * (VH / 2 - camY * zoom));
+    const x0 = camX - VW / 2 / zoom - 80, x1 = camX + VW / 2 / zoom + 80, y0 = camY - VH / 2 / zoom - 80, y1 = camY + VH / 2 / zoom + 80;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(ground, 0, 0, WW, WH);
+    // moon path on the lake
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 26; i++) {
+      const wx = WW * 0.52 + Math.sin(now / 900 + i) * 30 + (i % 5 - 2) * 18, wy = WH * 0.38 + i * 22;
+      if (terr(wx, wy) !== 0) continue;
+      ctx.fillStyle = 'rgba(244,236,200,' + (0.12 + Math.sin(now / 400 + i * 1.7) * 0.06) + ')';
+      ctx.fillRect(wx - 26 + Math.sin(now / 500 + i) * 6, wy, 52 - i, 3);
+    }
+    ctx.restore();
+    const vis = o => o.x > x0 && o.x < x1 && o.y > y0 && o.y < y1;
+    const v = things.filter(vis);
+    // ground layer: still things, then water/land animals
+    for (const o of v) if (['flower', 'mushroom', 'rock'].includes(o.f)) drawThing(o, now);
+    for (const o of v) if (['fish'].includes(o.f)) drawThing(o, now);
+    for (const o of v) if (['turtle', 'duck', 'frog', 'rabbit', 'hedgehog', 'fox', 'deer'].includes(o.f)) drawThing(o, now);
+    for (const o of v) if (o.f === 'tree') drawTree(o, now);
+    for (const o of v) if (['moth', 'owl', 'firefly'].includes(o.f)) drawThing(o, now);
+    // reach + highlights
+    if (playing) {
+      ctx.setLineDash([6, 8]); ctx.strokeStyle = 'rgba(159,240,208,0.25)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(me.x, me.y, reach(), 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      for (const o of v) if (inReach(o)) ring(o, FORMS[o.f].col, 1.5, 0.35 + Math.sin(now / 300 + o.ph) * 0.2);
+      if (hover && inReach(hover)) ring(hover, '#f4ecc8', 2.5, 0.9);
+    }
+    for (const o of v) if (o.f === 'cloud') drawCloud(o);
+    // me: halo
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const hr = FORMS[me.f].r + 26 + Math.sin(now / 400) * 4, g = ctx.createRadialGradient(me.x, me.y, 0, me.x, me.y, hr);
+    g.addColorStop(0, 'rgba(159,240,208,0.35)'); g.addColorStop(1, 'rgba(159,240,208,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(me.x, me.y, hr, 0, 7); ctx.fill();
+    for (const s of sparks) { ctx.fillStyle = s.c; ctx.globalAlpha = Math.min(1, s.life * 2); ctx.beginPath(); ctx.arc(s.x + Math.sin(s.life * 20) * 4, s.y, 3, 0, 7); ctx.fill(); }
+    ctx.restore();
+    if (moveTo) { ctx.strokeStyle = 'rgba(244,236,200,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(moveTo.x, moveTo.y, 8 + Math.sin(now / 150) * 2, 0, 7); ctx.stroke(); }
+    // night vignette
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const vg = ctx.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.3, VW / 2, VH / 2, Math.max(VW, VH) * 0.75);
+    vg.addColorStop(0, 'rgba(4,6,12,0)'); vg.addColorStop(1, 'rgba(4,6,12,0.7)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, VW, VH);
+    // moon
+    ctx.fillStyle = '#f4ecc8'; ctx.shadowColor = '#f4ecc8'; ctx.shadowBlur = 30; ctx.beginPath(); ctx.arc(VW - Math.max(56, VW * 0.07), Math.max(70, VH * 0.1), 22, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.033, (now - last) / 1000); last = now;
+    update(dt); render(now);
+    requestAnimationFrame(frame);
+  }
+  $('startBtn').addEventListener('click', () => { $('intro').hidden = true; playing = true; cv.focus(); toast('You are a Firefly'); });
+  $('keepBtn').addEventListener('click', () => { $('done').hidden = true; });
+  ui();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

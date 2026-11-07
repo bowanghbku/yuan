@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lumen</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syncopate:wght@700&family=Sora:wght@400;600&display=swap">
+<style>
+/* Layout: header strip (title, level, mirror tray, controls) over a centred glowing board; level picker and tips as overlay cards. Single dark look: beams need the dark. */
+:root {
+  --void: #07060f;
+  --board: #0e0c1d;
+  --line: #231f3d;
+  --ink: #ecebff;
+  --muted: #8b86b3;
+  --beam: #f2f7ff;
+  --red: #ff5470;
+  --green: #4dffa6;
+  --blue: #4db8ff;
+  --panel: rgba(16, 14, 32, 0.94);
+  --display: "Syncopate", "Arial Black", system-ui, sans-serif;
+  --body: "Sora", system-ui, -apple-system, Segoe UI, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: radial-gradient(ellipse at 50% 40%, #151233 0%, var(--void) 70%) fixed, var(--void); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-user-select: none; user-select: none; }
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); box-sizing: border-box; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding-block: 12px 8px; }
+.logo { font-family: var(--display); font-size: 20px; letter-spacing: 0.18em; color: var(--beam); text-shadow: 0 0 12px rgba(160, 200, 255, 0.7); }
+.lvl { font-size: 13px; color: var(--muted); }
+.lvl b { color: var(--ink); font-weight: 600; }
+.tray { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.tray i { width: 16px; height: 16px; position: relative; display: inline-block; }
+.tray i::before { content: ""; position: absolute; left: 50%; top: -2px; width: 2.5px; height: 20px; background: var(--beam); border-radius: 2px; transform: translateX(-50%) rotate(45deg); box-shadow: 0 0 6px rgba(200, 230, 255, 0.9); }
+.tray i.used::before { background: var(--line); box-shadow: none; }
+.sp { flex: 1; }
+.btn { font: 600 12px var(--body); letter-spacing: 0.04em; color: var(--ink); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn:focus-visible, .go:focus-visible, .lv:focus-visible { outline: 2px solid var(--beam); outline-offset: 2px; }
+.boardwrap { position: relative; min-height: 0; display: grid; place-items: center; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+canvas { display: block; touch-action: manipulation; cursor: pointer; }
+.tip { position: absolute; left: 50%; bottom: max(14px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); max-width: min(560px, 100%); box-sizing: border-box;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: 13px; line-height: 1.5; color: var(--muted); text-align: center; }
+.tip b { color: var(--ink); }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); background: rgba(5, 4, 12, 0.6); }
+.card { width: 100%; max-width: 480px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 24px; display: grid; gap: 14px; box-shadow: 0 0 60px rgba(120, 140, 255, 0.12); }
+.card h1 { margin: 0; font-family: var(--display); font-size: clamp(30px, 8vw, 46px); letter-spacing: 0.16em; color: var(--beam); text-shadow: 0 0 22px rgba(160, 200, 255, 0.8); }
+.card h2 { margin: 0; font-family: var(--display); font-size: 20px; letter-spacing: 0.12em; }
+.card p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.go { justify-self: start; font: 600 14px var(--body); color: #0a0918; background: var(--beam); border: 0; border-radius: 6px; padding: 11px 18px; cursor: pointer; box-shadow: 0 0 18px rgba(200, 230, 255, 0.5); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 8px; }
+.lv { font: 600 15px var(--body); color: var(--ink); background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 8px; aspect-ratio: 1; cursor: pointer; font-variant-numeric: tabular-nums; position: relative; }
+.lv.done { border-color: rgba(77, 255, 166, 0.6); color: var(--green); }
+.lv.done::after { content: ""; position: absolute; right: 6px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+.lv.cur { box-shadow: 0 0 0 2px var(--beam); }
+.lv:disabled { opacity: 0.3; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .card { box-shadow: none; } }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <span class="logo">LUMEN</span>
+    <span class="lvl">Level <b id="lvlNum">1</b> / <span id="lvlTot">16</span></span>
+    <span class="tray" id="tray" aria-label="Mirrors left"></span>
+    <span class="sp"></span>
+    <button class="btn" id="hintBtn">Hint</button>
+    <button class="btn" id="resetBtn">Reset</button>
+    <button class="btn" id="levelsBtn">Levels</button>
+  </header>
+  <div class="boardwrap" id="wrap">
+    <canvas id="c"></canvas>
+    <div class="tip" id="tip"></div>
+  </div>
+</div>
+
+<div class="overlay" id="intro">
+  <div class="card">
+    <h1>LUMEN</h1>
+    <p>Bend beams of light with mirrors until every crystal glows. Tap an empty square to place a mirror, tap again to flip it, and tap a third time to pick it up.</p>
+    <p>Each level gives you exactly the mirrors you need. New pieces appear as you go: locked mirrors, dark crystals that must stay dark, coloured light, colour filters and beam splitters.</p>
+    <button class="go" id="playBtn">Play</button>
+  </div>
+</div>
+
+<div class="overlay" id="won" hidden>
+  <div class="card">
+    <h2 id="wonTitle">LEVEL 1 LIT</h2>
+    <p id="wonText">Every crystal is glowing.</p>
+    <button class="go" id="nextBtn">Next level</button>
+  </div>
+</div>
+
+<div class="overlay" id="picker" hidden>
+  <div class="card">
+    <h2>LEVELS</h2>
+    <div class="grid" id="grid"></div>
+    <button class="btn" id="closePicker" style="justify-self:start">Close</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const LEVELS = [{"w":6,"h":5,"inv":1,"cells":[{"x":5,"y":2,"t":"E","d":2,"c":"w"},{"x":3,"y":4,"t":"T","c":"w"}],"sol":[[3,2,"/"]]},{"w":6,"h":5,"inv":2,"cells":[{"x":2,"y":4,"t":"E","d":3,"c":"w"},{"x":5,"y":4,"t":"T","c":"w"}],"sol":[[2,3,"/"],[5,3,"\\"]]},{"w":6,"h":6,"inv":2,"cells":[{"x":5,"y":1,"t":"E","d":2,"c":"w"},{"x":5,"y":3,"t":"T","c":"w"},{"x":2,"y":5,"t":"#"},{"x":3,"y":0,"t":"#"}],"sol":[[4,1,"/"],[4,3,"\\"]]},{"w":7,"h":6,"inv":3,"cells":[{"x":1,"y":0,"t":"E","d":1,"c":"w"},{"x":5,"y":5,"t":"T","c":"w"},{"x":6,"y":4,"t":"E","d":2,"c":"w"},{"x":6,"y":1,"t":"T","c":"w"},{"x":6,"y":2,"t":"#"},{"x":2,"y":1,"t":"#"}],"sol":[[5,4,"/"],[1,4,"\\"],[5,1,"/"]]},{"w":7,"h":6,"inv":2,"cells":[{"x":6,"y":2,"t":"E","d":2,"c":"w"},{"x":3,"y":2,"t":"M","o":"\\"},{"x":1,"y":2,"t":"T","c":"w"},{"x":4,"y":4,"t":"#"},{"x":5,"y":0,"t":"X"},{"x":2,"y":1,"t":"X"}],"sol":[[3,0,"\\"],[1,0,"/"]]},{"w":7,"h":6,"inv":3,"cells":[{"x":3,"y":5,"t":"E","d":3,"c":"w"},{"x":6,"y":5,"t":"T","c":"w"},{"x":0,"y":2,"t":"E","d":0,"c":"w"},{"x":2,"y":2,"t":"M","o":"\\"},{"x":0,"y":5,"t":"T","c":"w"},{"x":4,"y":5,"t":"#"},{"x":5,"y":4,"t":"X"},{"x":0,"y":3,"t":"X"}],"sol":[[2,5,"/"],[3,3,"/"],[6,3,"\\"]]},{"w":7,"h":6,"inv":3,"cells":[{"x":4,"y":5,"t":"E","d":3,"c":"r"},{"x":6,"y":3,"t":"T","c":"r"},{"x":3,"y":0,"t":"E","d":1,"c":"g"},{"x":0,"y":0,"t":"T","c":"g"},{"x":1,"y":5,"t":"#"},{"x":3,"y":4,"t":"#"},{"x":1,"y":4,"t":"#"}],"sol":[[3,1,"/"],[0,1,"\\"],[4,3,"/"]]},{"w":7,"h":7,"inv":2,"cells":[{"x":0,"y":2,"t":"E","d":0,"c":"w"},{"x":1,"y":2,"t":"F","c":"g"},{"x":3,"y":2,"t":"M","o":"\\"},{"x":0,"y":4,"t":"T","c":"g"},{"x":2,"y":5,"t":"#"},{"x":6,"y":2,"t":"#"},{"x":5,"y":5,"t":"#"},{"x":4,"y":0,"t":"#"},{"x":4,"y":2,"t":"X"},{"x":2,"y":4,"t":"X"}],"sol":[[3,3,"/"],[0,3,"/"]]},{"w":7,"h":7,"inv":3,"cells":[{"x":6,"y":2,"t":"E","d":2,"c":"r"},{"x":6,"y":0,"t":"T","c":"r"},{"x":0,"y":2,"t":"E","d":0,"c":"g"},{"x":3,"y":4,"t":"M","o":"\\"},{"x":6,"y":4,"t":"T","c":"g"},{"x":3,"y":5,"t":"#"},{"x":5,"y":3,"t":"#"},{"x":3,"y":1,"t":"X"},{"x":4,"y":6,"t":"X"}],"sol":[[3,2,"\\"],[5,2,"\\"],[5,0,"/"]]},{"w":7,"h":7,"inv":2,"cells":[{"x":5,"y":6,"t":"E","d":3,"c":"w"},{"x":5,"y":4,"t":"S","o":"\\"},{"x":2,"y":1,"t":"T","c":"w"},{"x":0,"y":6,"t":"T","c":"w"},{"x":3,"y":2,"t":"#"},{"x":6,"y":6,"t":"#"},{"x":2,"y":6,"t":"X"}],"sol":[[5,1,"\\"],[0,4,"/"]]},{"w":8,"h":7,"inv":3,"cells":[{"x":2,"y":0,"t":"E","d":1,"c":"w"},{"x":2,"y":1,"t":"F","c":"r"},{"x":0,"y":0,"t":"T","c":"r"},{"x":4,"y":0,"t":"E","d":1,"c":"w"},{"x":4,"y":2,"t":"F","c":"b"},{"x":4,"y":5,"t":"M","o":"\\"},{"x":7,"y":1,"t":"T","c":"b"},{"x":6,"y":3,"t":"#"},{"x":1,"y":6,"t":"#"},{"x":5,"y":2,"t":"#"},{"x":1,"y":4,"t":"#"},{"x":0,"y":4,"t":"X"},{"x":3,"y":3,"t":"X"}],"sol":[[7,5,"/"],[2,2,"/"],[0,2,"\\"]]},{"w":8,"h":7,"inv":3,"cells":[{"x":7,"y":1,"t":"E","d":2,"c":"w"},{"x":3,"y":1,"t":"F","c":"b"},{"x":7,"y":2,"t":"T","c":"b"},{"x":2,"y":6,"t":"#"},{"x":2,"y":3,"t":"#"},{"x":6,"y":0,"t":"#"},{"x":6,"y":5,"t":"#"},{"x":7,"y":6,"t":"X"},{"x":0,"y":1,"t":"X"},{"x":6,"y":2,"t":"X"}],"sol":[[1,1,"/"],[1,4,"\\"],[7,4,"/"]]},{"w":8,"h":7,"inv":4,"cells":[{"x":7,"y":5,"t":"E","d":2,"c":"r"},{"x":4,"y":5,"t":"M","o":"\\"},{"x":2,"y":2,"t":"T","c":"r"},{"x":7,"y":2,"t":"E","d":2,"c":"g"},{"x":7,"y":0,"t":"T","c":"g"},{"x":1,"y":0,"t":"E","d":1,"c":"b"},{"x":7,"y":6,"t":"T","c":"b"},{"x":0,"y":3,"t":"#"},{"x":6,"y":3,"t":"#"},{"x":3,"y":0,"t":"#"},{"x":5,"y":3,"t":"#"},{"x":4,"y":1,"t":"X"}],"sol":[[1,6,"\\"],[6,2,"\\"],[6,0,"/"],[4,2,"\\"]]},{"w":8,"h":8,"inv":4,"cells":[{"x":1,"y":0,"t":"E","d":1,"c":"r"},{"x":1,"y":3,"t":"S","o":"\\"},{"x":1,"y":5,"t":"T","c":"r"},{"x":3,"y":7,"t":"T","c":"r"},{"x":5,"y":7,"t":"E","d":3,"c":"g"},{"x":2,"y":7,"t":"T","c":"g"},{"x":3,"y":6,"t":"#"},{"x":2,"y":4,"t":"#"},{"x":3,"y":4,"t":"#"},{"x":5,"y":1,"t":"X"},{"x":5,"y":4,"t":"X"}],"sol":[[5,5,"\\"],[2,5,"/"],[4,3,"\\"],[4,7,"/"]]},{"w":8,"h":8,"inv":5,"cells":[{"x":0,"y":2,"t":"E","d":0,"c":"w"},{"x":2,"y":2,"t":"F","c":"b"},{"x":7,"y":5,"t":"T","c":"b"},{"x":7,"y":1,"t":"E","d":2,"c":"w"},{"x":5,"y":1,"t":"F","c":"g"},{"x":6,"y":5,"t":"M","o":"\\"},{"x":6,"y":7,"t":"T","c":"g"},{"x":1,"y":6,"t":"#"},{"x":3,"y":3,"t":"#"},{"x":5,"y":2,"t":"#"},{"x":1,"y":7,"t":"#"},{"x":0,"y":5,"t":"X"},{"x":0,"y":7,"t":"X"}],"sol":[[4,1,"/"],[4,5,"\\"],[3,2,"/"],[3,0,"/"],[6,0,"\\"]]},{"w":8,"h":8,"inv":4,"cells":[{"x":5,"y":7,"t":"E","d":3,"c":"r"},{"x":3,"y":3,"t":"M","o":"\\"},{"x":3,"y":1,"t":"T","c":"r"},{"x":4,"y":7,"t":"E","d":3,"c":"g"},{"x":4,"y":5,"t":"M","o":"\\"},{"x":2,"y":5,"t":"S","o":"\\"},{"x":0,"y":7,"t":"T","c":"g"},{"x":2,"y":2,"t":"T","c":"g"},{"x":4,"y":0,"t":"E","d":1,"c":"b"},{"x":6,"y":0,"t":"T","c":"b"},{"x":6,"y":4,"t":"#"},{"x":0,"y":3,"t":"#"},{"x":1,"y":6,"t":"X"},{"x":5,"y":0,"t":"X"},{"x":0,"y":2,"t":"X"},{"x":7,"y":6,"t":"X"}],"sol":[[4,1,"\\"],[6,1,"/"],[0,5,"/"],[5,5,"\\"]]}];
+  const $ = id => document.getElementById(id);
+  const cv = $('c'), ctx = cv.getContext('2d'), wrap = $('wrap');
+  const COL = { w: '#f2f7ff', r: '#ff5470', g: '#4dffa6', b: '#4db8ff' };
+  const NAME = { w: 'white', r: 'red', g: 'green', b: 'blue' };
+  const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  const reflect = (d, o) => { const [dx, dy] = DIRS[d]; const nd = o === '/' ? [-dy, -dx] : [dy, dx]; return DIRS.findIndex(v => v[0] === nd[0] && v[1] === nd[1]); };
+
+  const TIPS = {
+    0: 'Tap the square where the beam should turn to place a <b>mirror</b>. Tap again to flip it.',
+    1: 'Two mirrors this time. The beam has to go around the corner twice.',
+    2: '<b>Walls</b> block light. Find a route around them.',
+    3: 'Two emitters, two crystals. <b>Every</b> crystal must glow.',
+    4: 'Mirrors with bolts are <b>locked</b>. <b>Dark crystals</b> (spiky, purple) must never be hit by light.',
+    6: '<b>Coloured light</b>: a crystal only glows for a beam of its own colour.',
+    7: 'A <b>filter</b> turns any beam that passes through it into its own colour.',
+    9: 'A <b>splitter</b> lets the beam through and also reflects a copy.',
+  };
+
+  let li = 0, L, player = {}, sim, cell = 60, ox = 0, oy = 0, solved = new Set(), wonFlag = false, t0 = performance.now(), hintCount = 0;
+  try { JSON.parse(localStorage.getItem('lumen-solved') || '[]').forEach(i => solved.add(i)); li = Math.min(LEVELS.length - 1, +localStorage.getItem('lumen-level') || 0); } catch (e) {}
+
+  // ---------- simulation ----------
+  function simulate() {
+    const g = new Map();
+    for (const c of L.cells) g.set(c.x + ',' + c.y, c);
+    for (const [k, o] of Object.entries(player)) g.set(k, { t: 'M', o, player: true });
+    const lit = new Set(), dark = new Set(), segs = [];
+    const seen = new Set();
+    const stack = L.cells.filter(c => c.t === 'E').map(c => ({ x: c.x, y: c.y, d: c.d, col: c.c }));
+    let guard = 0;
+    while (stack.length && guard < 4000) {
+      let { x, y, d, col } = stack.pop();
+      let sx = x, sy = y;
+      const flush = (ex, ey) => segs.push({ x1: sx, y1: sy, x2: ex, y2: ey, col });
+      for (;;) {
+        guard++;
+        const nx = x + DIRS[d][0], ny = y + DIRS[d][1];
+        if (nx < 0 || ny < 0 || nx >= L.w || ny >= L.h) { flush(x + DIRS[d][0] * 0.5, y + DIRS[d][1] * 0.5); break; }
+        x = nx; y = ny;
+        const key = x + ',' + y + ',' + d + ',' + col;
+        if (seen.has(key)) { flush(x, y); break; }
+        seen.add(key);
+        const c = g.get(x + ',' + y);
+        if (!c) continue;
+        if (c.t === '#' || c.t === 'E') { flush(x - DIRS[d][0] * 0.45, y - DIRS[d][1] * 0.45); break; }
+        if (c.t === 'M') { flush(x, y); sx = x; sy = y; d = reflect(d, c.o); continue; }
+        if (c.t === 'S') { flush(x, y); sx = x; sy = y; stack.push({ x, y, d: reflect(d, c.o), col }); continue; }
+        if (c.t === 'F') { flush(x, y); sx = x; sy = y; col = c.c; continue; }
+        if (c.t === 'T') { flush(x, y); if (c.c === col) lit.add(x + ',' + y); break; }
+        if (c.t === 'X') { flush(x, y); dark.add(x + ',' + y); break; }
+      }
+    }
+    const targets = L.cells.filter(c => c.t === 'T');
+    return { segs, lit, dark, won: targets.every(c => lit.has(c.x + ',' + c.y)) && dark.size === 0 };
+  }
+
+  // ---------- level flow ----------
+  function load(i) {
+    li = i; L = LEVELS[i]; player = {}; wonFlag = false; hintCount = 0;
+    try { localStorage.setItem('lumen-level', String(i)); } catch (e) {}
+    $('lvlNum').textContent = i + 1; $('lvlTot').textContent = LEVELS.length;
+    const tip = TIPS[i]; $('tip').innerHTML = tip || ''; $('tip').hidden = !tip;
+    layout(); refresh();
+  }
+  function used() { return Object.keys(player).length; }
+  function refresh() {
+    sim = simulate();
+    const tray = $('tray'); tray.innerHTML = '';
+    for (let k = 0; k < L.inv; k++) { const e = document.createElement('i'); if (k < used()) e.className = 'used'; tray.appendChild(e); }
+    tray.append(' ' + (L.inv - used()) + ' left');
+    if (sim.won && !wonFlag) {
+      wonFlag = true; solved.add(li);
+      try { localStorage.setItem('lumen-solved', JSON.stringify([...solved])); } catch (e) {}
+      setTimeout(() => {
+        $('wonTitle').textContent = 'LEVEL ' + (li + 1) + ' LIT';
+        const last = li === LEVELS.length - 1;
+        $('wonText').textContent = last ? 'That was the last level. Every crystal in Lumen is glowing.' : (hintCount ? 'Solved with ' + hintCount + ' hint' + (hintCount > 1 ? 's' : '') + '.' : 'Solved without hints.');
+        $('nextBtn').textContent = last ? 'Pick a level' : 'Next level';
+        $('won').hidden = false; $('nextBtn').focus();
+      }, 650);
+    }
+  }
+
+  // ---------- layout ----------
+  function layout() {
+    const r = wrap.getBoundingClientRect();
+    const availW = r.width, availH = r.height - 64;
+    cell = Math.floor(Math.min(availW / L.w, availH / L.h, 84));
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = cell * L.w, h = cell * L.h;
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', () => { if (L) layout(); });
+
+  // ---------- drawing ----------
+  const cx = x => x * cell + cell / 2, cy = y => y * cell + cell / 2;
+  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+
+  function drawMirror(x, y, o, kind) {
+    const s = cell * 0.36;
+    ctx.save(); ctx.translate(cx(x), cy(y)); if (o === '\\') ctx.scale(-1, 1);
+    ctx.lineCap = 'round';
+    if (kind === 'S') {
+      ctx.strokeStyle = 'rgba(190,210,255,0.55)'; ctx.lineWidth = cell * 0.09; ctx.setLineDash([cell * 0.07, cell * 0.06]);
+      ctx.beginPath(); ctx.moveTo(-s, s); ctx.lineTo(s, -s); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-s, s); ctx.lineTo(s, -s); ctx.stroke();
+    } else {
+      ctx.strokeStyle = kind === 'fixed' ? '#59547e' : '#cfe0ff'; ctx.lineWidth = cell * 0.1;
+      if (kind !== 'fixed') { ctx.shadowColor = '#9fc3ff'; ctx.shadowBlur = 10; }
+      ctx.beginPath(); ctx.moveTo(-s, s); ctx.lineTo(s, -s); ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-s + 2, s - 4); ctx.lineTo(s - 4, -s + 2); ctx.stroke();
+      if (kind === 'fixed') { ctx.fillStyle = '#9a95c4'; for (const k of [-0.6, 0.6]) { ctx.beginPath(); ctx.arc(k * s, -k * s, cell * 0.045, 0, 7); ctx.fill(); } }
+    }
+    ctx.restore();
+  }
+
+  function drawCrystal(x, y, col, on, now) {
+    const r = cell * 0.27, c = COL[col];
+    ctx.save(); ctx.translate(cx(x), cy(y));
+    if (on) {
+      const p = 0.8 + Math.sin(now / 220 + x + y) * 0.2;
+      const g = ctx.createRadialGradient(0, 0, 2, 0, 0, cell * 0.7);
+      g.addColorStop(0, c + 'aa'); g.addColorStop(1, c + '00');
+      ctx.fillStyle = g; ctx.globalAlpha = p; ctx.fillRect(-cell, -cell, cell * 2, cell * 2); ctx.globalAlpha = 1;
+    }
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + i * Math.PI / 3; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r * 1.15); }
+    ctx.closePath();
+    ctx.fillStyle = on ? c : c + '22'; ctx.strokeStyle = c; ctx.lineWidth = 2;
+    if (on) { ctx.shadowColor = c; ctx.shadowBlur = 18; }
+    ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = on ? 'rgba(255,255,255,0.75)' : c + '88'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, -r * 1.15); ctx.lineTo(0, r * 1.15); ctx.moveTo(-r * 0.86, -r * 0.57); ctx.lineTo(r * 0.86, r * 0.57); ctx.stroke();
+    ctx.restore();
+  }
+
+  function draw(now) {
+    if (!L) return;
+    const w = cell * L.w, h = cell * L.h;
+    ctx.clearRect(0, 0, w, h);
+    // board
+    ctx.fillStyle = '#0e0c1d'; rr(0, 0, w, h, 10); ctx.fill();
+    ctx.strokeStyle = '#1b1833'; ctx.lineWidth = 1;
+    for (let x = 1; x < L.w; x++) { ctx.beginPath(); ctx.moveTo(x * cell + 0.5, 6); ctx.lineTo(x * cell + 0.5, h - 6); ctx.stroke(); }
+    for (let y = 1; y < L.h; y++) { ctx.beginPath(); ctx.moveTo(6, y * cell + 0.5); ctx.lineTo(w - 6, y * cell + 0.5); ctx.stroke(); }
+    ctx.fillStyle = '#2b2650';
+    for (let x = 1; x < L.w; x++) for (let y = 1; y < L.h; y++) { ctx.beginPath(); ctx.arc(x * cell, y * cell, 1.6, 0, 7); ctx.fill(); }
+
+    // static pieces under the beams
+    for (const c of L.cells) {
+      if (c.t === '#') {
+        ctx.fillStyle = '#1d1a33'; rr(c.x * cell + 4, c.y * cell + 4, cell - 8, cell - 8, 6); ctx.fill();
+        ctx.fillStyle = '#272345'; rr(c.x * cell + 8, c.y * cell + 8, cell - 16, cell - 16, 4); ctx.fill();
+      } else if (c.t === 'F') {
+        ctx.fillStyle = COL[c.c] + '30'; ctx.strokeStyle = COL[c.c] + 'cc'; ctx.lineWidth = 2;
+        rr(c.x * cell + cell * 0.2, c.y * cell + cell * 0.2, cell * 0.6, cell * 0.6, 6); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = COL[c.c] + '55'; rr(c.x * cell + cell * 0.26, c.y * cell + cell * 0.26, cell * 0.14, cell * 0.48, 3); ctx.fill();
+      }
+    }
+
+    // beams (additive glow)
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    const flick = 0.85 + Math.sin(now / 90) * 0.05;
+    for (const pass of [[cell * 0.32, 0.12], [cell * 0.14, 0.35], [cell * 0.05, 1]]) {
+      for (const s of sim.segs) {
+        ctx.strokeStyle = COL[s.col]; ctx.globalAlpha = pass[1] * flick; ctx.lineWidth = pass[0];
+        ctx.beginPath(); ctx.moveTo(cx(s.x1), cy(s.y1)); ctx.lineTo(cx(s.x2), cy(s.y2)); ctx.stroke();
+      }
+    }
+    // travelling sparkles, one per cell of beam
+    ctx.globalAlpha = 0.9; ctx.fillStyle = '#ffffff';
+    for (const s of sim.segs) {
+      const len = Math.hypot(s.x2 - s.x1, s.y2 - s.y1); if (len < 0.2) continue;
+      const f = (now / 600) % 1;
+      for (let k = 0; k < len; k++) {
+        const u = (k + f) / len; if (u > 1) break;
+        ctx.beginPath(); ctx.arc(cx(s.x1 + (s.x2 - s.x1) * u), cy(s.y1 + (s.y2 - s.y1) * u), cell * 0.03, 0, 7); ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // pieces above the beams
+    for (const c of L.cells) {
+      if (c.t === 'E') {
+        ctx.save(); ctx.translate(cx(c.x), cy(c.y)); ctx.rotate([0, Math.PI / 2, Math.PI, -Math.PI / 2][c.d]);
+        ctx.fillStyle = '#2a2650'; rr(-cell * 0.34, -cell * 0.3, cell * 0.6, cell * 0.6, 8); ctx.fill();
+        ctx.fillStyle = '#3a3570'; rr(cell * 0.12, -cell * 0.14, cell * 0.24, cell * 0.28, 4); ctx.fill();
+        ctx.fillStyle = COL[c.c]; ctx.shadowColor = COL[c.c]; ctx.shadowBlur = 14;
+        ctx.beginPath(); ctx.arc(-cell * 0.06, 0, cell * 0.11, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+        ctx.restore();
+      } else if (c.t === 'M') drawMirror(c.x, c.y, c.o, 'fixed');
+      else if (c.t === 'S') drawMirror(c.x, c.y, c.o, 'S');
+      else if (c.t === 'T') drawCrystal(c.x, c.y, c.c, sim.lit.has(c.x + ',' + c.y), now);
+      else if (c.t === 'X') {
+        const hit = sim.dark.has(c.x + ',' + c.y);
+        ctx.save(); ctx.translate(cx(c.x), cy(c.y));
+        if (hit) { ctx.fillStyle = 'rgba(255,60,80,' + (0.25 + Math.sin(now / 80) * 0.15) + ')'; ctx.beginPath(); ctx.arc(0, 0, cell * 0.45, 0, 7); ctx.fill(); }
+        ctx.fillStyle = hit ? '#ff3c50' : '#2a1640'; ctx.strokeStyle = hit ? '#ffd0d6' : '#7a4ab0'; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8, r = (i % 2 ? 0.14 : 0.3) * cell; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
+    }
+    for (const [k, o] of Object.entries(player)) { const [x, y] = k.split(',').map(Number); drawMirror(x, y, o, 'player'); }
+
+    // hover
+    if (hover && !occupied(hover.x, hover.y)) {
+      ctx.strokeStyle = 'rgba(200,220,255,0.25)'; ctx.lineWidth = 1.5; rr(hover.x * cell + 3, hover.y * cell + 3, cell - 6, cell - 6, 6); ctx.stroke();
+    }
+    if (flashCell) {
+      const a = 1 - (now - flashCell.t) / 400;
+      if (a > 0) { ctx.fillStyle = 'rgba(255,84,112,' + a * 0.35 + ')'; rr(flashCell.x * cell + 3, flashCell.y * cell + 3, cell - 6, cell - 6, 6); ctx.fill(); } else flashCell = null;
+    }
+  }
+
+  // ---------- input ----------
+  let hover = null, flashCell = null;
+  const occupied = (x, y) => L.cells.some(c => c.x === x && c.y === y);
+  function cellAt(e) {
+    const r = cv.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / cell), y = Math.floor((e.clientY - r.top) / cell);
+    return x >= 0 && y >= 0 && x < L.w && y < L.h ? { x, y } : null;
+  }
+  cv.addEventListener('pointermove', e => { hover = cellAt(e); });
+  cv.addEventListener('pointerleave', () => { hover = null; });
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  cv.addEventListener('pointerdown', e => {
+    if (wonFlag) return;
+    const p = cellAt(e); if (!p || occupied(p.x, p.y)) { if (p) flashCell = { ...p, t: performance.now() }; return; }
+    const k = p.x + ',' + p.y;
+    if (e.button === 2) { delete player[k]; refresh(); return; }
+    if (!player[k]) { if (used() >= L.inv) { flashCell = { ...p, t: performance.now() }; return; } player[k] = '/'; }
+    else if (player[k] === '/') player[k] = '\\';
+    else delete player[k];
+    refresh();
+  });
+
+  $('resetBtn').addEventListener('click', () => { player = {}; wonFlag = false; refresh(); });
+  $('hintBtn').addEventListener('click', () => {
+    if (wonFlag) return;
+    // place the first solution mirror that isn't already right
+    const wrongKeys = Object.keys(player).filter(k => !L.sol.some(([x, y, o]) => x + ',' + y === k && player[k] === o));
+    for (const k of wrongKeys) delete player[k];
+    const next = L.sol.find(([x, y, o]) => player[x + ',' + y] !== o);
+    if (next) { player[next[0] + ',' + next[1]] = next[2]; hintCount++; }
+    refresh();
+  });
+  $('playBtn').addEventListener('click', () => { $('intro').hidden = true; });
+  $('nextBtn').addEventListener('click', () => {
+    $('won').hidden = true;
+    if (li < LEVELS.length - 1) load(li + 1); else openPicker();
+  });
+  function openPicker() {
+    const g = $('grid'); g.innerHTML = '';
+    const maxOpen = Math.max(0, ...[...solved].map(i => i + 1));
+    LEVELS.forEach((_, i) => {
+      const b = document.createElement('button');
+      b.className = 'lv' + (solved.has(i) ? ' done' : '') + (i === li ? ' cur' : '');
+      b.textContent = i + 1; b.disabled = i > maxOpen;
+      b.addEventListener('click', () => { $('picker').hidden = true; load(i); });
+      g.appendChild(b);
+    });
+    $('picker').hidden = false;
+  }
+  $('levelsBtn').addEventListener('click', openPicker);
+  $('closePicker').addEventListener('click', () => { $('picker').hidden = true; });
+  window.addEventListener('keydown', e => {
+    if (e.key === 'r' || e.key === 'R') $('resetBtn').click();
+    else if (e.key === 'h' || e.key === 'H') $('hintBtn').click();
+    else if (e.key === 'Escape') { $('picker').hidden = true; $('intro').hidden = true; }
+  });
+
+  load(li);
+  if (solved.size) $('intro').hidden = true;
+  (function frame(now) { draw(now); requestAnimationFrame(frame); })(performance.now());
+})();
+</script>
+</body>
+</html>

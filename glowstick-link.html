@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Glowstick Link</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Outfit:wght@400;600&display=swap">
+<style>
+/* Layout: header strip (name, level, stats, controls) above a centred square board on a dark party-tent backdrop; level picker and win card as overlays. Single dark look: glow needs dark. */
+:root {
+  --night: #08070d;
+  --board: #110f1a;
+  --line: #24203a;
+  --ink: #f1eefc;
+  --muted: #8e88a8;
+  --pink: #ff3fa4;
+  --lime: #7dff3f;
+  --panel: rgba(18, 16, 30, 0.94);
+  --display: "Bungee", "Arial Black", system-ui, sans-serif;
+  --body: "Outfit", system-ui, -apple-system, Segoe UI, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: radial-gradient(ellipse at 50% 30%, #1a1430 0%, var(--night) 65%) fixed, var(--night); color: var(--ink); font-family: var(--body); overflow: hidden; -webkit-user-select: none; user-select: none; }
+.app { height: 100%; display: grid; grid-template-rows: auto auto 1fr; box-sizing: border-box; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: 12px 4px; }
+.logo { font-family: var(--display); font-size: 20px; letter-spacing: 0.02em; background: linear-gradient(90deg, var(--pink), #ffa53f, var(--lime), #3fe8ff); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 8px rgba(255, 63, 164, 0.5)); }
+.lvl { font-size: 14px; color: var(--muted); }
+.lvl b { color: var(--ink); font-weight: 600; }
+.sp { flex: 1; }
+.btn { font: 600 13px var(--body); color: var(--ink); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn:focus-visible, .go:focus-visible, .lv:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); padding-bottom: 6px; font-variant-numeric: tabular-nums; }
+.stats b { color: var(--ink); font-weight: 600; }
+.boardwrap { position: relative; min-height: 0; display: grid; place-items: center; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+canvas { display: block; touch-action: none; cursor: pointer; }
+.tip { position: absolute; left: 50%; bottom: max(10px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); max-width: min(520px, 100%); box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; font-size: 13px; line-height: 1.5; color: var(--muted); text-align: center; pointer-events: none; }
+.tip b { color: var(--ink); }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); background: rgba(5, 4, 10, 0.62); }
+.card { width: 100%; max-width: 460px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: grid; gap: 14px; }
+.card h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(32px, 8vw, 48px); line-height: 1; background: linear-gradient(90deg, var(--pink), #ffa53f, var(--lime), #3fe8ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.card h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 26px; color: var(--lime); text-shadow: 0 0 14px rgba(125, 255, 63, 0.6); }
+.card p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.card p b { color: var(--ink); }
+.go { justify-self: start; font: 600 15px var(--body); color: #0b0a12; background: var(--lime); border: 0; border-radius: 8px; padding: 11px 18px; cursor: pointer; box-shadow: 0 0 18px rgba(125, 255, 63, 0.45); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 8px; }
+.lv { font: 600 15px var(--body); color: var(--ink); background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 10px; aspect-ratio: 1; cursor: pointer; position: relative; font-variant-numeric: tabular-nums; }
+.lv.done { border-color: rgba(125, 255, 63, 0.55); color: var(--lime); }
+.lv.perfect::after { content: "★"; position: absolute; right: 5px; top: 2px; font-size: 11px; color: #ffe83f; }
+.lv.cur { box-shadow: 0 0 0 2px var(--pink); }
+.lv:disabled { opacity: 0.3; cursor: default; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <span class="logo">Glowstick Link</span>
+    <span class="lvl">Level <b id="lvlNum">1</b> / <span id="lvlTot">20</span></span>
+    <span class="sp"></span>
+    <button class="btn" id="undoBtn">Undo</button>
+    <button class="btn" id="hintBtn">Hint</button>
+    <button class="btn" id="resetBtn">Reset</button>
+    <button class="btn" id="levelsBtn">Levels</button>
+  </header>
+  <div class="stats">
+    <span>Linked <b id="sLinked">0/0</b></span>
+    <span>Filled <b id="sFilled">0%</b></span>
+    <span>Moves <b id="sMoves">0</b></span>
+    <span>Best <b id="sBest">–</b></span>
+  </div>
+  <div class="boardwrap" id="wrap">
+    <canvas id="c"></canvas>
+    <div class="tip" id="tip" hidden></div>
+  </div>
+</div>
+
+<div class="overlay" id="intro">
+  <div class="card">
+    <h1>Glowstick Link</h1>
+    <p>Each colour has two glowing caps. Drag from a cap to lay a glow stick to its partner, and it <b>snaps on</b> and lights up.</p>
+    <p>Sticks can't cross. Dragging over another stick cuts it. Link every pair <b>and</b> fill every square to clear the level.</p>
+    <p>Finish in as few moves as there are colours to earn a ★.</p>
+    <button class="go" id="playBtn">Let's glow</button>
+  </div>
+</div>
+
+<div class="overlay" id="won" hidden>
+  <div class="card">
+    <h2 id="wonTitle">All lit!</h2>
+    <p id="wonText"></p>
+    <button class="go" id="nextBtn">Next level</button>
+  </div>
+</div>
+
+<div class="overlay" id="picker" hidden>
+  <div class="card">
+    <h2>Levels</h2>
+    <div class="grid" id="grid"></div>
+    <button class="btn" id="closePicker" style="justify-self:start">Close</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const LEVELS = [{"w":5,"h":5,"pairs":[[[0,4],[0,2]],[[4,4],[3,1]],[[1,2],[4,3]]],"sol":[[[0,4],[1,4],[1,3],[0,3],[0,2]],[[4,4],[3,4],[2,4],[2,3],[3,3],[3,2],[2,2],[2,1],[3,1]],[[1,2],[1,1],[0,1],[0,0],[1,0],[2,0],[3,0],[4,0],[4,1],[4,2],[4,3]]]},{"w":5,"h":5,"pairs":[[[0,0],[1,1]],[[2,1],[1,4]],[[0,4],[0,1]],[[3,1],[2,2]]],"sol":[[[0,0],[1,0],[1,1]],[[2,1],[2,0],[3,0],[4,0],[4,1],[4,2],[4,3],[4,4],[3,4],[3,3],[2,3],[2,4],[1,4]],[[0,4],[0,3],[1,3],[1,2],[0,2],[0,1]],[[3,1],[3,2],[2,2]]]},{"w":5,"h":5,"pairs":[[[4,3],[0,2]],[[1,1],[4,2]],[[2,0],[3,1]],[[0,1],[1,0]]],"sol":[[[4,3],[4,4],[3,4],[3,3],[2,3],[2,4],[1,4],[0,4],[0,3],[1,3],[1,2],[0,2]],[[1,1],[2,1],[2,2],[3,2],[4,2]],[[2,0],[3,0],[4,0],[4,1],[3,1]],[[0,1],[0,0],[1,0]]]},{"w":5,"h":5,"pairs":[[[1,2],[2,3]],[[3,1],[1,0]],[[2,4],[4,3]],[[4,2],[2,0]],[[0,0],[1,3]]],"sol":[[[1,2],[2,2],[3,2],[3,3],[2,3]],[[3,1],[2,1],[1,1],[1,0]],[[2,4],[3,4],[4,4],[4,3]],[[4,2],[4,1],[4,0],[3,0],[2,0]],[[0,0],[0,1],[0,2],[0,3],[0,4],[1,4],[1,3]]]},{"w":6,"h":6,"pairs":[[[0,1],[1,0]],[[0,5],[1,4]],[[5,0],[0,4]],[[2,0],[4,0]],[[1,3],[5,5]]],"sol":[[[0,1],[0,0],[1,0]],[[0,5],[1,5],[1,4]],[[5,0],[5,1],[5,2],[4,2],[3,2],[2,2],[2,1],[1,1],[1,2],[0,2],[0,3],[0,4]],[[2,0],[3,0],[3,1],[4,1],[4,0]],[[1,3],[2,3],[2,4],[2,5],[3,5],[3,4],[3,3],[4,3],[5,3],[5,4],[4,4],[4,5],[5,5]]]},{"w":6,"h":6,"pairs":[[[5,0],[1,0]],[[0,2],[4,5]],[[3,5],[1,4]],[[0,0],[1,2]],[[2,2],[5,1]]],"sol":[[[5,0],[4,0],[3,0],[2,0],[1,0]],[[0,2],[0,3],[1,3],[2,3],[2,4],[3,4],[4,4],[4,3],[3,3],[3,2],[4,2],[5,2],[5,3],[5,4],[5,5],[4,5]],[[3,5],[2,5],[1,5],[0,5],[0,4],[1,4]],[[0,0],[0,1],[1,1],[1,2]],[[2,2],[2,1],[3,1],[4,1],[5,1]]]},{"w":6,"h":6,"pairs":[[[5,4],[1,0]],[[4,0],[2,0]],[[2,1],[1,3]],[[1,4],[3,4]],[[3,3],[5,2]],[[5,3],[4,4]]],"sol":[[[5,4],[5,5],[4,5],[3,5],[2,5],[1,5],[0,5],[0,4],[0,3],[0,2],[1,2],[1,1],[0,1],[0,0],[1,0]],[[4,0],[5,0],[5,1],[4,1],[3,1],[3,0],[2,0]],[[2,1],[2,2],[2,3],[1,3]],[[1,4],[2,4],[3,4]],[[3,3],[3,2],[4,2],[5,2]],[[5,3],[4,3],[4,4]]]},{"w":6,"h":6,"pairs":[[[4,5],[0,2]],[[1,1],[2,2]],[[0,1],[1,0]],[[2,4],[5,5]],[[4,3],[4,1]],[[4,2],[1,4]]],"sol":[[[4,5],[3,5],[2,5],[1,5],[0,5],[0,4],[0,3],[0,2]],[[1,1],[1,2],[2,2]],[[0,1],[0,0],[1,0]],[[2,4],[3,4],[4,4],[5,4],[5,5]],[[4,3],[5,3],[5,2],[5,1],[5,0],[4,0],[3,0],[2,0],[2,1],[3,1],[4,1]],[[4,2],[3,2],[3,3],[2,3],[1,3],[1,4]]]},{"w":7,"h":7,"pairs":[[[0,3],[1,2]],[[2,2],[5,5]],[[2,6],[1,4]],[[1,5],[0,4]],[[1,3],[3,6]],[[5,6],[5,3]]],"sol":[[[0,3],[0,2],[1,2]],[[2,2],[2,1],[1,1],[0,1],[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[6,1],[6,2],[5,2],[5,1],[4,1],[3,1],[3,2],[4,2],[4,3],[4,4],[5,4],[5,5]],[[2,6],[2,5],[2,4],[1,4]],[[1,5],[1,6],[0,6],[0,5],[0,4]],[[1,3],[2,3],[3,3],[3,4],[3,5],[4,5],[4,6],[3,6]],[[5,6],[6,6],[6,5],[6,4],[6,3],[5,3]]]},{"w":7,"h":7,"pairs":[[[6,1],[4,1]],[[3,1],[6,5]],[[6,4],[6,2]],[[1,4],[4,6]],[[4,0],[1,3]],[[3,3],[2,1]]],"sol":[[[6,1],[6,0],[5,0],[5,1],[4,1]],[[3,1],[3,2],[4,2],[5,2],[5,3],[5,4],[5,5],[5,6],[6,6],[6,5]],[[6,4],[6,3],[6,2]],[[1,4],[0,4],[0,5],[0,6],[1,6],[1,5],[2,5],[2,6],[3,6],[3,5],[4,5],[4,6]],[[4,0],[3,0],[2,0],[1,0],[0,0],[0,1],[0,2],[0,3],[1,3]],[[3,3],[4,3],[4,4],[3,4],[2,4],[2,3],[2,2],[1,2],[1,1],[2,1]]]},{"w":7,"h":7,"pairs":[[[6,3],[1,4]],[[5,6],[6,4]],[[3,1],[6,2]],[[2,1],[4,1]],[[3,6],[5,5]],[[0,2],[2,2]],[[1,5],[3,5]]],"sol":[[[6,3],[5,3],[5,4],[4,4],[4,3],[3,3],[2,3],[1,3],[0,3],[0,4],[1,4]],[[5,6],[6,6],[6,5],[6,4]],[[3,1],[3,2],[4,2],[5,2],[6,2]],[[2,1],[1,1],[0,1],[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[6,1],[5,1],[4,1]],[[3,6],[4,6],[4,5],[5,5]],[[0,2],[1,2],[2,2]],[[1,5],[0,5],[0,6],[1,6],[2,6],[2,5],[2,4],[3,4],[3,5]]]},{"w":7,"h":7,"pairs":[[[1,2],[2,0]],[[0,4],[1,1]],[[6,4],[2,6]],[[4,4],[5,2]],[[4,2],[3,1]],[[2,5],[4,3]],[[3,0],[6,3]]],"sol":[[[1,2],[2,2],[2,1],[2,0]],[[0,4],[0,5],[0,6],[1,6],[1,5],[1,4],[1,3],[0,3],[0,2],[0,1],[0,0],[1,0],[1,1]],[[6,4],[6,5],[6,6],[5,6],[5,5],[4,5],[4,6],[3,6],[2,6]],[[4,4],[5,4],[5,3],[5,2]],[[4,2],[3,2],[3,1]],[[2,5],[3,5],[3,4],[2,4],[2,3],[3,3],[4,3]],[[3,0],[4,0],[4,1],[5,1],[5,0],[6,0],[6,1],[6,2],[6,3]]]},{"w":8,"h":8,"pairs":[[[5,7],[5,1]],[[0,4],[0,2]],[[3,1],[3,3]],[[0,1],[3,0]],[[3,4],[7,2]],[[2,5],[0,5]],[[7,3],[6,7]]],"sol":[[[5,7],[5,6],[5,5],[5,4],[6,4],[6,3],[5,3],[5,2],[5,1]],[[0,4],[0,3],[0,2]],[[3,1],[3,2],[2,2],[2,1],[1,1],[1,2],[1,3],[1,4],[2,4],[2,3],[3,3]],[[0,1],[0,0],[1,0],[2,0],[3,0]],[[3,4],[3,5],[4,5],[4,4],[4,3],[4,2],[4,1],[4,0],[5,0],[6,0],[7,0],[7,1],[6,1],[6,2],[7,2]],[[2,5],[1,5],[1,6],[2,6],[3,6],[4,6],[4,7],[3,7],[2,7],[1,7],[0,7],[0,6],[0,5]],[[7,3],[7,4],[7,5],[6,5],[6,6],[7,6],[7,7],[6,7]]]},{"w":8,"h":8,"pairs":[[[3,3],[2,1]],[[1,2],[1,0]],[[4,5],[3,4]],[[0,0],[1,3]],[[7,2],[5,5]],[[2,0],[7,0]],[[7,1],[6,2]]],"sol":[[[3,3],[2,3],[2,2],[3,2],[3,1],[2,1]],[[1,2],[1,1],[1,0]],[[4,5],[3,5],[2,5],[2,4],[3,4]],[[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[1,7],[1,6],[1,5],[1,4],[1,3]],[[7,2],[7,3],[7,4],[7,5],[6,5],[6,6],[7,6],[7,7],[6,7],[5,7],[4,7],[3,7],[2,7],[2,6],[3,6],[4,6],[5,6],[5,5]],[[2,0],[3,0],[4,0],[4,1],[4,2],[4,3],[4,4],[5,4],[6,4],[6,3],[5,3],[5,2],[5,1],[5,0],[6,0],[7,0]],[[7,1],[6,1],[6,2]]]},{"w":8,"h":8,"pairs":[[[1,6],[0,7]],[[6,1],[2,1]],[[7,3],[7,7]],[[0,6],[4,4]],[[0,2],[6,2]],[[6,7],[3,7]],[[3,6],[1,5]],[[4,5],[0,3]]],"sol":[[[1,6],[2,6],[2,7],[1,7],[0,7]],[[6,1],[5,1],[5,2],[4,2],[4,1],[3,1],[3,2],[2,2],[2,1]],[[7,3],[7,4],[7,5],[6,5],[6,6],[7,6],[7,7]],[[0,6],[0,5],[0,4],[1,4],[2,4],[3,4],[4,4]],[[0,2],[1,2],[1,1],[0,1],[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[7,1],[7,2],[6,2]],[[6,7],[5,7],[4,7],[3,7]],[[3,6],[3,5],[2,5],[1,5]],[[4,5],[4,6],[5,6],[5,5],[5,4],[6,4],[6,3],[5,3],[4,3],[3,3],[2,3],[1,3],[0,3]]]},{"w":8,"h":8,"pairs":[[[2,6],[2,3]],[[0,1],[0,4]],[[5,1],[5,3]],[[2,4],[4,1]],[[7,1],[4,0]],[[0,5],[3,6]],[[3,0],[0,0]],[[6,3],[6,1]]],"sol":[[[2,6],[1,6],[1,5],[1,4],[1,3],[2,3]],[[0,1],[0,2],[0,3],[0,4]],[[5,1],[5,2],[4,2],[4,3],[5,3]],[[2,4],[2,5],[3,5],[4,5],[5,5],[5,4],[4,4],[3,4],[3,3],[3,2],[3,1],[4,1]],[[7,1],[7,0],[6,0],[5,0],[4,0]],[[0,5],[0,6],[0,7],[1,7],[2,7],[3,7],[3,6]],[[3,0],[2,0],[2,1],[2,2],[1,2],[1,1],[1,0],[0,0]],[[6,3],[6,4],[6,5],[6,6],[5,6],[4,6],[4,7],[5,7],[6,7],[7,7],[7,6],[7,5],[7,4],[7,3],[7,2],[6,2],[6,1]]]},{"w":9,"h":9,"pairs":[[[6,7],[5,5]],[[1,1],[5,6]],[[5,4],[8,1]],[[1,5],[2,8]],[[1,7],[2,1]],[[6,6],[7,7]],[[8,0],[7,3]],[[1,8],[0,7]]],"sol":[[[6,7],[6,8],[7,8],[8,8],[8,7],[8,6],[8,5],[7,5],[6,5],[5,5]],[[1,1],[1,2],[2,2],[2,3],[1,3],[0,3],[0,2],[0,1],[0,0],[1,0],[2,0],[3,0],[4,0],[4,1],[4,2],[5,2],[5,3],[4,3],[4,4],[4,5],[3,5],[3,6],[4,6],[4,7],[3,7],[3,8],[4,8],[5,8],[5,7],[5,6]],[[5,4],[6,4],[7,4],[8,4],[8,3],[8,2],[8,1]],[[1,5],[2,5],[2,6],[2,7],[2,8]],[[1,7],[1,6],[0,6],[0,5],[0,4],[1,4],[2,4],[3,4],[3,3],[3,2],[3,1],[2,1]],[[6,6],[7,6],[7,7]],[[8,0],[7,0],[6,0],[5,0],[5,1],[6,1],[7,1],[7,2],[6,2],[6,3],[7,3]],[[1,8],[0,8],[0,7]]]},{"w":9,"h":9,"pairs":[[[2,0],[1,2]],[[6,8],[6,6]],[[4,1],[3,0]],[[1,8],[5,8]],[[2,2],[0,8]],[[7,3],[7,1]],[[7,2],[5,3]],[[5,2],[3,1]]],"sol":[[[2,0],[2,1],[1,1],[1,0],[0,0],[0,1],[0,2],[1,2]],[[6,8],[6,7],[7,7],[7,8],[8,8],[8,7],[8,6],[8,5],[8,4],[7,4],[7,5],[7,6],[6,6]],[[4,1],[4,0],[3,0]],[[1,8],[2,8],[3,8],[3,7],[2,7],[2,6],[3,6],[3,5],[3,4],[3,3],[4,3],[4,4],[4,5],[4,6],[5,6],[5,7],[4,7],[4,8],[5,8]],[[2,2],[2,3],[2,4],[2,5],[1,5],[1,4],[1,3],[0,3],[0,4],[0,5],[0,6],[1,6],[1,7],[0,7],[0,8]],[[7,3],[8,3],[8,2],[8,1],[8,0],[7,0],[6,0],[5,0],[5,1],[6,1],[7,1]],[[7,2],[6,2],[6,3],[6,4],[6,5],[5,5],[5,4],[5,3]],[[5,2],[4,2],[3,2],[3,1]]]},{"w":9,"h":9,"pairs":[[[1,1],[2,2]],[[0,5],[6,4]],[[7,5],[7,8]],[[4,6],[6,8]],[[1,2],[0,0]],[[6,5],[7,6]],[[8,1],[0,4]],[[1,0],[8,0]],[[7,7],[5,6]]],"sol":[[[1,1],[2,1],[3,1],[4,1],[4,2],[3,2],[3,3],[2,3],[2,2]],[[0,5],[0,6],[0,7],[0,8],[1,8],[2,8],[3,8],[3,7],[3,6],[2,6],[2,7],[1,7],[1,6],[1,5],[2,5],[3,5],[4,5],[5,5],[5,4],[6,4]],[[7,5],[7,4],[8,4],[8,5],[8,6],[8,7],[8,8],[7,8]],[[4,6],[4,7],[4,8],[5,8],[6,8]],[[1,2],[0,2],[0,1],[0,0]],[[6,5],[6,6],[7,6]],[[8,1],[7,1],[6,1],[5,1],[5,2],[6,2],[7,2],[8,2],[8,3],[7,3],[6,3],[5,3],[4,3],[4,4],[3,4],[2,4],[1,4],[1,3],[0,3],[0,4]],[[1,0],[2,0],[3,0],[4,0],[5,0],[6,0],[7,0],[8,0]],[[7,7],[6,7],[5,7],[5,6]]]},{"w":9,"h":9,"pairs":[[[3,3],[0,0]],[[0,6],[1,7]],[[6,8],[7,5]],[[4,7],[4,3]],[[8,7],[7,8]],[[2,2],[0,5]],[[1,6],[4,8]],[[5,3],[8,6]],[[1,0],[6,3]]],"sol":[[[3,3],[3,2],[3,1],[2,1],[1,1],[0,1],[0,0]],[[0,6],[0,7],[0,8],[1,8],[2,8],[2,7],[1,7]],[[6,8],[5,8],[5,7],[5,6],[5,5],[6,5],[6,6],[6,7],[7,7],[7,6],[7,5]],[[4,7],[4,6],[4,5],[3,5],[3,4],[4,4],[4,3]],[[8,7],[8,8],[7,8]],[[2,2],[1,2],[0,2],[0,3],[0,4],[0,5]],[[1,6],[1,5],[1,4],[1,3],[2,3],[2,4],[2,5],[2,6],[3,6],[3,7],[3,8],[4,8]],[[5,3],[5,4],[6,4],[7,4],[8,4],[8,5],[8,6]],[[1,0],[2,0],[3,0],[4,0],[5,0],[5,1],[4,1],[4,2],[5,2],[6,2],[7,2],[7,1],[6,1],[6,0],[7,0],[8,0],[8,1],[8,2],[8,3],[7,3],[6,3]]]}]
+;
+  const COLORS = ['#ff3fa4', '#7dff3f', '#3fe8ff', '#ffa53f', '#b06bff', '#ffe83f', '#ff4d4d', '#4d7dff', '#3fffc4'];
+  const $ = id => document.getElementById(id);
+  const cv = $('c'), ctx = cv.getContext('2d'), wrap = $('wrap');
+
+  let li = 0, L, paths, dots, cell = 60, moves = 0, history = [], drag = null, lastColor = -1, wonFlag = false, snaps = [], hints = 0;
+  let save = { solved: {}, level: 0 };
+  try { save = Object.assign(save, JSON.parse(localStorage.getItem('glowlink') || '{}')); } catch (e) {}
+  li = Math.min(LEVELS.length - 1, save.level || 0);
+  const persist = () => { try { localStorage.setItem('glowlink', JSON.stringify(save)); } catch (e) {} };
+
+  const key = (x, y) => x + ',' + y;
+
+  function load(i) {
+    li = i; L = LEVELS[i]; save.level = i; persist();
+    dots = new Map();
+    L.pairs.forEach((p, c) => p.forEach(([x, y]) => dots.set(key(x, y), c)));
+    paths = L.pairs.map(() => []);
+    moves = 0; history = []; lastColor = -1; wonFlag = false; snaps = []; hints = 0;
+    $('lvlNum').textContent = i + 1; $('lvlTot').textContent = LEVELS.length;
+    layout(); update();
+  }
+
+  // ---------- state helpers ----------
+  function owner() {
+    const m = new Map();
+    paths.forEach((p, c) => p.forEach(([x, y]) => m.set(key(x, y), c)));
+    return m;
+  }
+  const isDone = c => { const p = paths[c]; if (p.length < 2) return false; const a = p[0], b = p[p.length - 1]; return dots.get(key(...a)) === c && dots.get(key(...b)) === c && key(...a) !== key(...b); };
+  const snapshot = () => paths.map(p => p.map(q => q.slice()));
+
+  function update() {
+    const own = owner();
+    const linked = paths.filter((_, c) => isDone(c)).length;
+    const filled = new Set([...own.keys(), ...dots.keys()]).size;
+    const pct = Math.round(filled / (L.w * L.h) * 100);
+    $('sLinked').textContent = linked + '/' + L.pairs.length;
+    $('sFilled').textContent = pct + '%';
+    $('sMoves').textContent = moves;
+    const best = save.solved[li]; $('sBest').textContent = best ? best : '–';
+    const tip = $('tip');
+    if (linked === L.pairs.length && pct < 100) { tip.innerHTML = 'Every pair is linked. Now <b>fill every square</b>: reroute some sticks through the empty spots.'; tip.hidden = false; }
+    else if (li === 0 && moves === 0) { tip.innerHTML = 'Drag from a glowing cap to its matching cap.'; tip.hidden = false; }
+    else tip.hidden = true;
+    if (linked === L.pairs.length && pct === 100 && !wonFlag) win();
+  }
+
+  function win() {
+    wonFlag = true;
+    const prev = save.solved[li];
+    if (!prev || moves < prev) save.solved[li] = moves;
+    persist();
+    for (let c = 0; c < paths.length; c++) snaps.push({ c, t: performance.now() + c * 80 });
+    const perfect = moves <= L.pairs.length && hints === 0;
+    setTimeout(() => {
+      $('wonTitle').textContent = perfect ? 'Perfect glow ★' : 'All lit!';
+      $('wonText').textContent = 'Level ' + (li + 1) + ' done in ' + moves + ' move' + (moves === 1 ? '' : 's') + (perfect ? ', the fewest possible.' : '. A ★ needs ' + L.pairs.length + ' moves' + (hints ? ' and no hints' : '') + '.');
+      const last = li === LEVELS.length - 1;
+      $('nextBtn').textContent = last ? 'Pick a level' : 'Next level';
+      $('won').hidden = false; $('nextBtn').focus();
+    }, 900);
+  }
+
+  // ---------- editing ----------
+  function cutAt(c, x, y) {
+    const p = paths[c]; const i = p.findIndex(q => q[0] === x && q[1] === y);
+    if (i >= 0) paths[c] = p.slice(0, i);
+  }
+  function stepTo(x, y) {
+    const c = drag.c, p = paths[c];
+    const last = p[p.length - 1];
+    if (Math.abs(last[0] - x) + Math.abs(last[1] - y) !== 1) return false;
+    const k = key(x, y);
+    // backtrack along own stick
+    const i = p.findIndex(q => q[0] === x && q[1] === y);
+    if (i >= 0) { paths[c] = p.slice(0, i + 1); return true; }
+    if (isDone(c)) return false;
+    const d = dots.get(k);
+    if (d !== undefined && d !== c) return false;
+    // cut through another stick
+    const own = owner();
+    const o = own.get(k);
+    if (o !== undefined && o !== c) cutAt(o, x, y);
+    p.push([x, y]);
+    if (d === c && isDone(c)) snaps.push({ c, t: performance.now() });
+    return true;
+  }
+  function dragTo(x, y) {
+    let guard = 0;
+    while (guard++ < 30) {
+      const p = paths[drag.c], last = p[p.length - 1];
+      if (last[0] === x && last[1] === y) break;
+      const dx = x - last[0], dy = y - last[1];
+      const tries = Math.abs(dx) >= Math.abs(dy) ? [[Math.sign(dx), 0], [0, Math.sign(dy)]] : [[0, Math.sign(dy)], [Math.sign(dx), 0]];
+      let moved = false;
+      for (const [sx, sy] of tries) { if (!sx && !sy) continue; if (stepTo(last[0] + sx, last[1] + sy)) { moved = true; break; } }
+      if (!moved) break;
+    }
+  }
+
+  function cellAt(e) {
+    const r = cv.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / cell), y = Math.floor((e.clientY - r.top) / cell);
+    return x >= 0 && y >= 0 && x < L.w && y < L.h ? [x, y] : null;
+  }
+  cv.addEventListener('pointerdown', e => {
+    if (wonFlag) return;
+    const p = cellAt(e); if (!p) return;
+    const k = key(...p), d = dots.get(k), own = owner();
+    const before = snapshot();
+    if (d !== undefined) { drag = { c: d, before }; paths[d] = [p]; }
+    else if (own.has(k)) { const c = own.get(k); drag = { c, before }; const i = paths[c].findIndex(q => key(...q) === k); paths[c] = paths[c].slice(0, i + 1); }
+    else return;
+    cv.setPointerCapture(e.pointerId);
+    update();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const p = cellAt(e); if (!p) return;
+    dragTo(p[0], p[1]); update();
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    const changed = JSON.stringify(drag.before) !== JSON.stringify(paths);
+    if (changed) { history.push(drag.before); if (history.length > 200) history.shift(); if (drag.c !== lastColor) moves++; lastColor = drag.c; }
+    // a lone cap with nothing drawn is just a tap
+    if (paths[drag.c].length === 1) paths[drag.c] = [];
+    drag = null; update();
+  };
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
+
+  $('undoBtn').addEventListener('click', () => { if (wonFlag || !history.length) return; paths = history.pop(); lastColor = -1; update(); });
+  $('resetBtn').addEventListener('click', () => { if (wonFlag) return; history.push(snapshot()); paths = L.pairs.map(() => []); moves = 0; lastColor = -1; update(); });
+  $('hintBtn').addEventListener('click', () => {
+    if (wonFlag) return;
+    // lay the correct stick for the first colour that isn't already right
+    const same = (a, b) => a.length === b.length && (a.every((q, i) => q[0] === b[i][0] && q[1] === b[i][1]) || a.every((q, i) => q[0] === b[b.length - 1 - i][0] && q[1] === b[b.length - 1 - i][1]));
+    const c = L.sol.findIndex((s, i) => !same(paths[i], s));
+    if (c < 0) return;
+    history.push(snapshot());
+    const target = L.sol[c];
+    const cells = new Set(target.map(q => key(...q)));
+    paths = paths.map((p, i) => { if (i === c) return target.map(q => q.slice()); const j = p.findIndex(q => cells.has(key(...q))); return j >= 0 ? p.slice(0, j) : p; });
+    hints++; moves++; lastColor = -1;
+    snaps.push({ c, t: performance.now() });
+    update();
+  });
+
+  // ---------- layout & drawing ----------
+  function layout() {
+    const r = wrap.getBoundingClientRect();
+    cell = Math.floor(Math.min((r.width) / L.w, (r.height - 50) / L.h, 80));
+    const dpr = Math.min(2, window.devicePixelRatio || 1), w = cell * L.w, h = cell * L.h;
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', () => { if (L) layout(); });
+  const cx = x => x * cell + cell / 2;
+  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+  const hexA = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
+
+  function draw(now) {
+    if (!L) return;
+    const w = cell * L.w, h = cell * L.h;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#110f1a'; rr(0, 0, w, h, 12); ctx.fill();
+    // owned-cell tint
+    const own = owner();
+    for (const [k, c] of own) { const [x, y] = k.split(',').map(Number); ctx.fillStyle = hexA(COLORS[c], isDone(c) ? 0.13 : 0.07); ctx.fillRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2); }
+    ctx.strokeStyle = '#211d34'; ctx.lineWidth = 1;
+    for (let x = 1; x < L.w; x++) { ctx.beginPath(); ctx.moveTo(x * cell + 0.5, 0); ctx.lineTo(x * cell + 0.5, h); ctx.stroke(); }
+    for (let y = 1; y < L.h; y++) { ctx.beginPath(); ctx.moveTo(0, y * cell + 0.5); ctx.lineTo(w, y * cell + 0.5); ctx.stroke(); }
+
+    // sticks
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    paths.forEach((p, c) => {
+      if (p.length < 2) return;
+      const col = COLORS[c], done = isDone(c);
+      const snap = snaps.filter(s => s.c === c).map(s => now - s.t).filter(a => a >= 0 && a < 700)[0];
+      const boost = snap !== undefined ? 1 - snap / 700 : 0;
+      const pulse = done ? 0.9 + Math.sin(now / 400 + c) * 0.1 : 1;
+      const line = () => { ctx.beginPath(); ctx.moveTo(cx(p[0][0]), cx(p[0][1])); for (const q of p.slice(1)) ctx.lineTo(cx(q[0]), cx(q[1])); ctx.stroke(); };
+      if (done) {
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = hexA(col, (0.18 + boost * 0.4) * pulse); ctx.lineWidth = cell * (0.62 + boost * 0.3); line();
+        ctx.restore();
+        ctx.strokeStyle = col; ctx.lineWidth = cell * 0.36; ctx.shadowColor = col; ctx.shadowBlur = 16 + boost * 30; line(); ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(255,255,255,' + (0.55 + boost * 0.45) + ')'; ctx.lineWidth = cell * 0.09; line();
+      } else {
+        // unsnapped: dull plastic tube with a faint core
+        ctx.strokeStyle = hexA(col, 0.38); ctx.lineWidth = cell * 0.34; line();
+        ctx.strokeStyle = hexA(col, 0.75); ctx.lineWidth = cell * 0.08; line();
+      }
+    });
+
+    // caps
+    for (const [k, c] of dots) {
+      const [x, y] = k.split(',').map(Number), col = COLORS[c], done = isDone(c);
+      ctx.save(); ctx.translate(cx(x), cx(y));
+      ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = done ? 22 : 10;
+      ctx.beginPath(); ctx.arc(0, 0, cell * 0.3, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(-cell * 0.08, -cell * 0.08, cell * 0.08, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, cell * 0.3, 0, 7); ctx.stroke();
+      // keyring loop
+      ctx.strokeStyle = hexA(col, 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, cell * 0.38, 0, 7); ctx.stroke();
+      ctx.restore();
+    }
+    // spark bursts on snap
+    for (const s of snaps) {
+      const a = (now - s.t) / 600; if (a < 0 || a > 1) continue;
+      const p = paths[s.c]; if (!p.length) continue;
+      const [x, y] = p[p.length - 1];
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = COLORS[s.c]; ctx.globalAlpha = 1 - a;
+      for (let i = 0; i < 10; i++) { const ang = i * 0.628 + s.c, r = cell * (0.3 + a * 0.6); ctx.beginPath(); ctx.arc(cx(x) + Math.cos(ang) * r, cx(y) + Math.sin(ang) * r, cell * 0.04, 0, 7); ctx.fill(); }
+      ctx.restore();
+    }
+    snaps = snaps.filter(s => now - s.t < 1000);
+  }
+
+  // ---------- menus ----------
+  $('playBtn').addEventListener('click', () => { $('intro').hidden = true; });
+  $('nextBtn').addEventListener('click', () => { $('won').hidden = true; if (li < LEVELS.length - 1) load(li + 1); else openPicker(); });
+  function openPicker() {
+    const g = $('grid'); g.innerHTML = '';
+    const solvedIdx = Object.keys(save.solved).map(Number);
+    const maxOpen = solvedIdx.length ? Math.max(...solvedIdx) + 1 : 0;
+    LEVELS.forEach((lv, i) => {
+      const b = document.createElement('button');
+      const best = save.solved[i];
+      b.className = 'lv' + (best ? ' done' : '') + (best && best <= lv.pairs.length ? ' perfect' : '') + (i === li ? ' cur' : '');
+      b.textContent = i + 1; b.disabled = i > maxOpen;
+      b.addEventListener('click', () => { $('picker').hidden = true; load(i); });
+      g.appendChild(b);
+    });
+    $('picker').hidden = false;
+  }
+  $('levelsBtn').addEventListener('click', openPicker);
+  $('closePicker').addEventListener('click', () => { $('picker').hidden = true; });
+  window.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); $('undoBtn').click(); }
+    else if (e.key === 'r' || e.key === 'R') $('resetBtn').click();
+    else if (e.key === 'h' || e.key === 'H') $('hintBtn').click();
+    else if (e.key === 'Escape') { $('picker').hidden = true; $('intro').hidden = true; }
+  });
+
+  load(li);
+  if (Object.keys(save.solved).length) $('intro').hidden = true;
+  (function frame(now) { draw(now); requestAnimationFrame(frame); })(performance.now());
+})();
+</script>
+</body>
+</html>

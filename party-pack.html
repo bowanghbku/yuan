@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Party Pack</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;800&family=Outfit:wght@400;600;800&display=swap">
+<style>
+/* Layout: hub of six game tiles (responsive grid) → one game screen (top bar with back/score/best, play area, result card). Single dark neon look by choice. */
+:root {
+  --night: #08070d;
+  --tile: #13111d;
+  --line: #272339;
+  --ink: #f3f0fb;
+  --muted: #8f89a8;
+  --c1: #ff3fa4; --c2: #7dff3f; --c3: #3fe8ff; --c4: #ffb347; --c5: #b06bff; --c6: #ffe83f;
+  --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --body: "Outfit", system-ui, -apple-system, Segoe UI, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--body); -webkit-user-select: none; user-select: none; overflow: hidden; }
+button { font-family: var(--body); }
+.wrap { height: 100%; overflow-y: auto; box-sizing: border-box; padding-block: 22px 28px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.inner { max-width: 1000px; margin: 0 auto; display: grid; gap: 22px; }
+.head h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(32px, 7vw, 58px); line-height: 1; }
+.head h1 span { background: linear-gradient(90deg, var(--c1), var(--c4), var(--c6), var(--c2), var(--c3)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.head p { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.t { text-align: left; display: grid; grid-template-columns: 54px 1fr; gap: 6px 14px; align-items: start; background: var(--tile); border: 1px solid var(--line); border-radius: 14px; padding: 16px; color: var(--ink); cursor: pointer; transition: transform 0.15s, border-color 0.15s; min-width: 0; }
+.t:hover { transform: translateY(-2px); border-color: var(--a); }
+.t:focus-visible { outline: 2px solid var(--a); outline-offset: 3px; }
+.ico { grid-row: span 3; width: 54px; height: 54px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--a) 14%, transparent); border: 1px solid color-mix(in srgb, var(--a) 50%, transparent); }
+.ico svg { width: 30px; height: 30px; stroke: var(--a); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 4px var(--a)); }
+.t h2 { margin: 0; font-family: var(--display); font-weight: 500; font-size: 17px; color: var(--a); }
+.t p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--muted); }
+.t .best { font-size: 12.5px; color: var(--muted); }
+.t .best b { color: var(--ink); }
+
+/* game screen */
+.screen { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr; background: var(--night); }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-block: max(10px, env(safe-area-inset-top, 0px)) 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); }
+.back { font: 600 13px var(--body); color: var(--ink); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+.gname { font-family: var(--display); font-weight: 500; font-size: 16px; color: var(--a); }
+.stat { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stat b { color: var(--ink); }
+.sp { flex: 1; }
+.area { position: relative; min-height: 0; overflow: hidden; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); box-sizing: border-box; display: grid; place-items: center; }
+.result { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(5, 4, 10, 0.7); padding: 16px; }
+.card { width: 100%; max-width: 380px; background: var(--tile); border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: grid; gap: 10px; text-align: left; }
+.card .tag { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--a); }
+.card .big { font-family: var(--display); font-weight: 800; font-size: 44px; font-variant-numeric: tabular-nums; }
+.card p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.go { justify-self: start; font: 700 15px var(--body); color: #0b0a12; background: var(--a); border: 0; border-radius: 8px; padding: 11px 18px; cursor: pointer; box-shadow: 0 0 16px color-mix(in srgb, var(--a) 50%, transparent); }
+.go:focus-visible, .back:focus-visible, .ans:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.ghostbtn { font: 600 14px var(--body); color: var(--ink); background: none; border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+
+/* per-game bits */
+.react { width: min(640px, 100%); height: min(60vh, 420px); border-radius: 18px; display: grid; place-items: center; text-align: center; cursor: pointer; transition: background 0.08s; font-family: var(--display); font-weight: 800; font-size: clamp(22px, 5vw, 38px); padding: 16px; box-sizing: border-box; }
+.react small { display: block; font-family: var(--body); font-weight: 400; font-size: 15px; color: rgba(255,255,255,0.75); margin-top: 8px; }
+.pads { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: min(420px, 90vw, 62vh); aspect-ratio: 1; }
+.pad { border-radius: 22px; border: 2px solid var(--p); background: color-mix(in srgb, var(--p) 12%, transparent); cursor: pointer; transition: background 0.08s, box-shadow 0.08s; }
+.pad.on { background: var(--p); box-shadow: 0 0 40px var(--p); }
+.msg { position: absolute; top: 14px; left: 0; right: 0; text-align: center; color: var(--muted); font-size: 15px; pointer-events: none; }
+.quiz { display: grid; gap: 22px; justify-items: center; width: min(560px, 100%); }
+.q { font-family: var(--display); font-weight: 800; font-size: clamp(40px, 10vw, 72px); font-variant-numeric: tabular-nums; text-align: center; }
+.ans-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+.ans { font: 800 clamp(22px, 5vw, 30px) var(--body); color: var(--ink); background: rgba(255,255,255,0.04); border: 1.5px solid var(--line); border-radius: 12px; padding: 16px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.ans:hover { border-color: var(--a); }
+.ans.good { background: color-mix(in srgb, var(--c2) 30%, transparent); border-color: var(--c2); }
+.ans.bad { background: color-mix(in srgb, var(--c1) 30%, transparent); border-color: var(--c1); }
+.timer { width: 100%; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.timer i { display: block; height: 100%; background: var(--a); }
+.sub { color: var(--muted); font-size: 14px; text-align: center; }
+canvas.play { display: block; touch-action: none; border-radius: 14px; background: #0d0b16; border: 1px solid var(--line); cursor: crosshair; }
+@media (prefers-reduced-motion: reduce) { .t { transition: none; } }
+</style>
+</head>
+<body>
+
+
+<div class="wrap" id="hub">
+  <div class="inner">
+    <div class="head">
+      <h1>Party <span>Pack</span></h1>
+      <p>Six quick games, about 30 seconds each. Beat your best scores.</p>
+    </div>
+    <div class="tiles" id="tiles"></div>
+  </div>
+</div>
+
+<section class="screen" id="screen" hidden>
+  <div class="bar">
+    <button class="back" id="backBtn">← Games</button>
+    <span class="gname" id="gName"></span>
+    <span class="sp"></span>
+    <span class="stat" id="gScore"></span>
+    <span class="stat">Best <b id="gBest">–</b></span>
+  </div>
+  <div class="area" id="area"></div>
+</section>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const css = getComputedStyle(document.documentElement);
+  const C = n => css.getPropertyValue('--c' + n).trim();
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('partypack') || '{}'); } catch (e) {}
+  const persist = () => { try { localStorage.setItem('partypack', JSON.stringify(saved)); } catch (e) {} };
+
+  // ---------- tiny synth ----------
+  let actx = null;
+  function tone(f, d = 0.15, type = 'triangle', vol = 0.15) {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain(), n = actx.currentTime;
+      o.type = type; o.frequency.value = f; g.gain.setValueAtTime(vol, n); g.gain.exponentialRampToValueAtTime(0.001, n + d);
+      o.connect(g).connect(actx.destination); o.start(n); o.stop(n + d + 0.02);
+    } catch (e) {}
+  }
+
+  // ---------- shell ----------
+  let current = null, cleanup = [];
+  const later = (fn, ms) => { const id = setTimeout(fn, ms); cleanup.push(() => clearTimeout(id)); return id; };
+  const every = (fn, ms) => { const id = setInterval(fn, ms); cleanup.push(() => clearInterval(id)); return id; };
+  const onKey = fn => { window.addEventListener('keydown', fn); cleanup.push(() => window.removeEventListener('keydown', fn)); };
+  const raf = fn => { let on = true; const loop = t => { if (!on) return; fn(t); requestAnimationFrame(loop); }; requestAnimationFrame(loop); cleanup.push(() => { on = false; }); };
+  function stopAll() { cleanup.forEach(f => f()); cleanup = []; }
+  function setScore(txt) { $('gScore').innerHTML = txt; }
+  const fmtBest = g => { const b = saved[g.id]; return b === undefined ? '–' : g.fmt(b); };
+
+  function open(g) {
+    stopAll(); current = g;
+    $('hub').hidden = true; $('screen').hidden = false;
+    $('screen').style.setProperty('--a', C(g.c));
+    $('gName').textContent = g.name; $('gBest').textContent = fmtBest(g); setScore('');
+    const area = $('area'); area.innerHTML = '';
+    intro(g);
+  }
+  function intro(g) {
+    const area = $('area'); area.innerHTML = '';
+    const r = document.createElement('div'); r.className = 'card';
+    r.innerHTML = `<div class="tag">${g.name}</div><p>${g.how}</p><button class="go">Start</button>`;
+    area.appendChild(r); r.querySelector('.go').addEventListener('click', () => { area.innerHTML = ''; g.run(area, score => finish(g, score)); }); r.querySelector('.go').focus();
+  }
+  function finish(g, score) {
+    stopAll();
+    const prev = saved[g.id];
+    const better = prev === undefined || (g.lower ? score < prev : score > prev);
+    if (better && score !== null) { saved[g.id] = score; persist(); }
+    $('gBest').textContent = fmtBest(g);
+    const res = document.createElement('div'); res.className = 'result';
+    res.innerHTML = `<div class="card"><div class="tag">${better && prev !== undefined ? 'New best!' : (better ? 'First score' : 'Result')}</div>
+      <div class="big">${score === null ? '–' : g.fmt(score)}</div><p>${g.note ? g.note(score) : ''}${prev !== undefined && !better ? ' Your best is ' + g.fmt(prev) + '.' : ''}</p>
+      <div class="row"><button class="go">Play again</button><button class="ghostbtn">All games</button></div></div>`;
+    $('area').appendChild(res);
+    res.querySelector('.go').addEventListener('click', () => { $('area').innerHTML = ''; current.run($('area'), s => finish(current, s)); });
+    res.querySelector('.ghostbtn').addEventListener('click', home);
+    res.querySelector('.go').focus();
+    if (better && score !== null) { tone(660, 0.12); later(() => tone(990, 0.2), 120); }
+  }
+  function home() { stopAll(); $('screen').hidden = true; $('hub').hidden = false; drawHub(); }
+  $('backBtn').addEventListener('click', home);
+
+  function timerBar(parent, secs, onEnd) {
+    const bar = document.createElement('div'); bar.className = 'timer'; bar.innerHTML = '<i></i>'; parent.prepend(bar);
+    const t0 = performance.now(); let extra = 0;
+    raf(t => { const left = Math.max(0, secs - (t - t0) / 1000 - extra); bar.firstChild.style.width = (left / secs * 100) + '%'; if (left <= 0) onEnd(); });
+    return { penalty: s => { extra += s; } };
+  }
+
+  // ---------- games ----------
+  const GAMES = [];
+
+  // 1. Lightning Tap — reaction time
+  GAMES.push({ id: 'react', name: 'Lightning Tap', c: 4, lower: true, fmt: v => Math.round(v) + ' ms',
+    blurb: 'Wait for green, then tap as fast as you can. Five rounds.',
+    how: 'The panel turns <b>green</b> after a random wait. Tap it (or press Space) the instant it does. Tapping early costs you the round. Your score is the average of 5 rounds, and lower is better.',
+    note: v => v < 250 ? 'Lightning reflexes.' : v < 330 ? 'Quick hands.' : 'Keep practising, it gets faster.',
+    icon: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+    run(area, done) {
+      const p = document.createElement('div'); p.className = 'react'; area.appendChild(p);
+      let round = 0, times = [], state = 'wait', t0 = 0, goTimer = 0;
+      const set = (bg, html) => { p.style.background = bg; p.innerHTML = html; };
+      function next() {
+        if (round === 5) return done(times.reduce((a, b) => a + b, 0) / times.length);
+        state = 'wait'; set('#3a1420', 'Wait for green…<small>Round ' + (round + 1) + ' of 5</small>');
+        goTimer = later(() => { state = 'go'; t0 = performance.now(); set('#1f7a3a', 'TAP!'); }, 1200 + Math.random() * 2300);
+      }
+      function hit() {
+        if (state === 'wait') { clearTimeout(goTimer); state = 'early'; set('#5a2a10', 'Too soon!<small>Tap to retry this round</small>'); tone(180, 0.2, 'sawtooth'); return; }
+        if (state === 'early') { next(); return; }
+        if (state === 'go') {
+          const ms = performance.now() - t0; times.push(ms); round++; tone(880, 0.08);
+          setScore('Last <b>' + Math.round(ms) + ' ms</b>');
+          state = 'shown'; set('#1a1830', Math.round(ms) + ' ms<small>' + (round < 5 ? 'Tap for the next round' : 'Tap to see your average') + '</small>');
+          return;
+        }
+        if (state === 'shown') next();
+      }
+      p.addEventListener('pointerdown', e => { e.preventDefault(); hit(); });
+      onKey(e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); hit(); } });
+      next();
+    } });
+
+  // 2. Glow Echo — repeat the light sequence
+  GAMES.push({ id: 'echo', name: 'Glow Echo', c: 5, fmt: v => v + ' long',
+    blurb: 'Watch the pads light up, then repeat the pattern. It grows each round.',
+    how: 'Watch which pads glow, then tap them in the same order. Each round adds one more step. Keys 1–4 work too. Your score is the longest pattern you repeat correctly.',
+    note: v => v >= 10 ? 'Memory champion.' : v >= 6 ? 'Sharp memory.' : 'Patterns get easier with practice.',
+    icon: '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/>',
+    run(area, done) {
+      const cols = [C(1), C(3), C(2), C(6)], notes = [330, 415, 494, 587];
+      const msg = document.createElement('div'); msg.className = 'msg'; area.appendChild(msg);
+      const g = document.createElement('div'); g.className = 'pads'; area.appendChild(g);
+      const pads = cols.map((c, i) => { const b = document.createElement('button'); b.className = 'pad'; b.style.setProperty('--p', c); b.setAttribute('aria-label', 'Pad ' + (i + 1)); g.appendChild(b); return b; });
+      let seq = [], pos = 0, input = false;
+      const flash = (i, ms) => { pads[i].classList.add('on'); tone(notes[i], ms / 1000); later(() => pads[i].classList.remove('on'), ms); };
+      function play() {
+        input = false; pos = 0; seq.push(Math.floor(Math.random() * 4));
+        msg.textContent = 'Watch…'; setScore('Length <b>' + seq.length + '</b>');
+        const step = Math.max(260, 620 - seq.length * 25);
+        seq.forEach((s, k) => later(() => flash(s, step * 0.7), 500 + k * step));
+        later(() => { input = true; msg.textContent = 'Your turn'; }, 500 + seq.length * step);
+      }
+      function press(i) {
+        if (!input) return;
+        flash(i, 180);
+        if (seq[pos] !== i) { input = false; tone(140, 0.4, 'sawtooth'); msg.textContent = 'Oops!'; later(() => done(seq.length - 1), 700); return; }
+        pos++;
+        if (pos === seq.length) { input = false; msg.textContent = 'Nice!'; later(play, 700); }
+      }
+      pads.forEach((b, i) => b.addEventListener('pointerdown', e => { e.preventDefault(); press(i); }));
+      onKey(e => { const i = '1234'.indexOf(e.key); if (i >= 0) press(i); });
+      play();
+    } });
+
+  // 3. Meteor Dodge — survive falling rocks
+  GAMES.push({ id: 'dodge', name: 'Meteor Dodge', c: 3, fmt: v => v.toFixed(1) + ' s',
+    blurb: 'Slide your glowing orb to dodge falling meteors. Survive as long as you can.',
+    how: 'Move your orb by sliding your finger or mouse, or with ← →. Meteors fall faster and thicker over time. One touch and it\'s over. Your score is how long you survive.',
+    note: v => v >= 40 ? 'Untouchable.' : v >= 20 ? 'Slick moves.' : 'Watch the gaps, not the rocks.',
+    icon: '<circle cx="12" cy="18" r="3"/><path d="M6 3l2 5M12 2l1 5M18 4l-1 5"/>',
+    run(area, done) {
+      const cv = document.createElement('canvas'); cv.className = 'play'; area.appendChild(cv);
+      const ctx = cv.getContext('2d');
+      const r = area.getBoundingClientRect();
+      const W = Math.min(520, r.width - 8), H = Math.min(r.height - 20, 640);
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      cv.style.width = W + 'px'; cv.style.height = H + 'px'; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      let px = W / 2, target = W / 2, rocks = [], t0 = performance.now(), last = t0, spawn = 0, alive = true, keys = {};
+      cv.addEventListener('pointermove', e => { const b = cv.getBoundingClientRect(); target = (e.clientX - b.left); });
+      cv.addEventListener('pointerdown', e => { const b = cv.getBoundingClientRect(); target = (e.clientX - b.left); });
+      onKey(e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); keys[e.key] = true; } });
+      const up = e => { keys[e.key] = false; }; window.addEventListener('keyup', up); cleanup.push(() => window.removeEventListener('keyup', up));
+      raf(now => {
+        if (!alive) return;
+        const dt = Math.min(0.033, (now - last) / 1000); last = now;
+        const el = (now - t0) / 1000;
+        if (keys.ArrowLeft) target = px - 400 * dt; if (keys.ArrowRight) target = px + 400 * dt;
+        target = Math.max(14, Math.min(W - 14, target));
+        px += (target - px) * Math.min(1, 14 * dt);
+        spawn -= dt;
+        if (spawn <= 0) { const s = 10 + Math.random() * 18; rocks.push({ x: Math.random() * W, y: -s, s, v: 160 + el * 9 + Math.random() * 80, r: Math.random() * 6 }); spawn = Math.max(0.12, 0.6 - el * 0.012); }
+        for (const k of rocks) { k.y += k.v * dt; k.r += dt * 2; }
+        rocks = rocks.filter(k => k.y < H + 40);
+        const py = H - 40;
+        if (rocks.some(k => Math.hypot(k.x - px, k.y - py) < k.s * 0.8 + 11)) { alive = false; tone(120, 0.5, 'sawtooth', 0.2); later(() => done(el), 500); }
+        setScore('Time <b>' + el.toFixed(1) + ' s</b>');
+        ctx.fillStyle = '#0d0b16'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)'; for (let i = 0; i < 40; i++) { const sx = (i * 97) % W, sy = (i * 53 + el * 30 * (1 + i % 3)) % H; ctx.fillRect(sx, sy, 1.5, 1.5); }
+        for (const k of rocks) { ctx.save(); ctx.translate(k.x, k.y); ctx.rotate(k.r); ctx.fillStyle = '#ff7a3a'; ctx.shadowColor = '#ff7a3a'; ctx.shadowBlur = 12;
+          ctx.beginPath(); for (let i = 0; i < 7; i++) { const a = i / 7 * 6.283, rr = k.s * (0.75 + ((i * 37) % 10) / 40); ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); ctx.restore(); }
+        ctx.fillStyle = C(3); ctx.shadowColor = C(3); ctx.shadowBlur = 20; ctx.beginPath(); ctx.arc(px, py, 11, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(px - 3, py - 3, 3, 0, 7); ctx.fill();
+      });
+    } });
+
+  // 4. Pop Rush — click shrinking orbs
+  GAMES.push({ id: 'pop', name: 'Pop Rush', c: 1, fmt: v => v + ' pops',
+    blurb: 'Glowing orbs pop up and shrink away. Pop as many as you can in 30 seconds.',
+    how: 'Tap the glowing orbs before they shrink away. Small orbs are worth more. You have 30 seconds.',
+    note: v => v >= 60 ? 'Sharpshooter.' : v >= 35 ? 'Great aim.' : 'Aim for the newest orbs first.',
+    icon: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
+    run(area, done) {
+      const cv = document.createElement('canvas'); cv.className = 'play'; area.appendChild(cv);
+      const ctx = cv.getContext('2d');
+      const r = area.getBoundingClientRect();
+      const W = Math.min(820, r.width - 8), H = Math.min(r.height - 30, 520);
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      cv.style.width = W + 'px'; cv.style.height = H + 'px'; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      let orbs = [], pops = [], score = 0, spawn = 0, last = performance.now(), t0 = last, ended = false;
+      const cols = [C(1), C(2), C(3), C(4), C(5), C(6)];
+      cv.addEventListener('pointerdown', e => {
+        const b = cv.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top;
+        for (let i = orbs.length - 1; i >= 0; i--) { const o = orbs[i]; if (Math.hypot(o.x - x, o.y - y) < o.r + 4) { const pts = o.r < 18 ? 2 : 1; score += pts; pops.push({ x: o.x, y: o.y, c: o.c, t: 0, pts }); orbs.splice(i, 1); tone(500 + Math.random() * 400, 0.08); setScore('Pops <b>' + score + '</b>'); return; } }
+      });
+      setScore('Pops <b>0</b>');
+      raf(now => {
+        if (ended) return;
+        const dt = Math.min(0.033, (now - last) / 1000); last = now; const el = (now - t0) / 1000;
+        if (el >= 30) { ended = true; return done(score); }
+        if ((spawn -= dt) <= 0) { orbs.push({ x: 30 + Math.random() * (W - 60), y: 30 + Math.random() * (H - 60), r: 34, c: cols[Math.floor(Math.random() * 6)], shrink: 14 + el * 0.8 }); spawn = Math.max(0.25, 0.7 - el * 0.015); }
+        for (const o of orbs) o.r -= o.shrink * dt;
+        orbs = orbs.filter(o => o.r > 4);
+        ctx.fillStyle = '#0d0b16'; ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = C(1); ctx.fillRect(0, 0, W * (1 - el / 30), 4);
+        for (const o of orbs) { ctx.fillStyle = o.c; ctx.shadowColor = o.c; ctx.shadowBlur = 18; ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, 7); ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(o.x - o.r * 0.3, o.y - o.r * 0.3, o.r * 0.25, 0, 7); ctx.fill(); }
+        for (const p of pops) { p.t += dt; ctx.strokeStyle = p.c; ctx.globalAlpha = 1 - p.t / 0.4; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, 10 + p.t * 120, 0, 7); ctx.stroke();
+          ctx.fillStyle = '#fff'; ctx.font = '800 16px Outfit, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('+' + p.pts, p.x, p.y - p.t * 60); ctx.globalAlpha = 1; }
+        pops = pops.filter(p => p.t < 0.4);
+      });
+    } });
+
+  // 5. Sum Sprint — quick maths
+  GAMES.push({ id: 'sums', name: 'Sum Sprint', c: 2, fmt: v => v + ' right',
+    blurb: 'Answer as many quick sums as you can in 30 seconds.',
+    how: 'Pick the right answer to each sum. Keys 1–4 pick the answers in order. A wrong answer costs 2 seconds. The sums get harder as you go. You have 30 seconds.',
+    note: v => v >= 25 ? 'Human calculator.' : v >= 15 ? 'Quick thinking.' : 'Speed comes with practice.',
+    icon: '<path d="M12 5v14M5 12h14"/>',
+    run(area, done) {
+      const box = document.createElement('div'); box.className = 'quiz'; area.appendChild(box);
+      const q = document.createElement('div'); q.className = 'q'; box.appendChild(q);
+      const grid = document.createElement('div'); grid.className = 'ans-grid'; box.appendChild(grid);
+      let right = 0, n = 0, ans = 0, lock = false;
+      const tb = timerBar(box, 30, () => { if (!lock) { lock = true; done(right); } });
+      function ask() {
+        n++; const hard = Math.min(4, Math.floor(n / 5));
+        const op = ['+', '−', '×'][Math.floor(Math.random() * (hard >= 2 ? 3 : 2))];
+        let a, b;
+        if (op === '×') { a = 2 + Math.floor(Math.random() * (5 + hard * 2)); b = 2 + Math.floor(Math.random() * 9); ans = a * b; }
+        else { const m = 10 + hard * 15; a = 1 + Math.floor(Math.random() * m); b = 1 + Math.floor(Math.random() * m); if (op === '−' && b > a) [a, b] = [b, a]; ans = op === '+' ? a + b : a - b; }
+        q.textContent = a + ' ' + op + ' ' + b;
+        const opts = new Set([ans]); while (opts.size < 4) { const d = ans + (Math.floor(Math.random() * 11) - 5) || ans + 7; if (d >= 0) opts.add(d); }
+        grid.innerHTML = '';
+        [...opts].sort(() => Math.random() - 0.5).forEach(v => { const b2 = document.createElement('button'); b2.className = 'ans'; b2.textContent = v; b2.addEventListener('click', () => pick(b2, v)); grid.appendChild(b2); });
+      }
+      function pick(btn, v) {
+        if (lock) return;
+        if (v === ans) { right++; btn.classList.add('good'); tone(760, 0.08); }
+        else { btn.classList.add('bad'); tb.penalty(2); tone(160, 0.2, 'sawtooth'); }
+        setScore('Right <b>' + right + '</b>');
+        lock = true; later(() => { lock = false; ask(); }, 180);
+      }
+      onKey(e => { const i = '1234'.indexOf(e.key); if (i >= 0 && grid.children[i]) grid.children[i].click(); });
+      setScore('Right <b>0</b>'); ask();
+    } });
+
+  // 6. Colour Clash — does the ink match the word?
+  GAMES.push({ id: 'clash', name: 'Colour Clash', c: 6, fmt: v => v + ' pts',
+    blurb: 'Does the word\'s colour match what it says? Trickier than it sounds.',
+    how: 'A colour word appears in coloured ink. Answer <b>Match</b> if the ink colour is the colour the word names, or <b>No match</b> if not. Use ← and → on a keyboard. Right +1, wrong −1, 30 seconds.',
+    note: v => v >= 30 ? 'Your brain ignores tricks.' : v >= 18 ? 'Clear head.' : 'Look at the ink, not the word.',
+    icon: '<path d="M4 7h16M4 12h10M4 17h13"/>',
+    run(area, done) {
+      const names = ['RED', 'GREEN', 'BLUE', 'YELLOW', 'PINK', 'PURPLE'];
+      const inks = ['#ff4d4d', '#7dff3f', '#4d9dff', '#ffe83f', '#ff3fa4', '#b06bff'];
+      const box = document.createElement('div'); box.className = 'quiz'; area.appendChild(box);
+      const q = document.createElement('div'); q.className = 'q'; box.appendChild(q);
+      const sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = 'Is the ink the colour the word says?'; box.appendChild(sub);
+      const grid = document.createElement('div'); grid.className = 'ans-grid'; box.appendChild(grid);
+      const yes = document.createElement('button'); yes.className = 'ans'; yes.textContent = 'Match';
+      const no = document.createElement('button'); no.className = 'ans'; no.textContent = 'No match';
+      grid.append(yes, no);
+      let pts = 0, match = false, lock = false, ended = false;
+      timerBar(box, 30, () => { if (!ended) { ended = true; done(pts); } });
+      function ask() {
+        const w = Math.floor(Math.random() * 6); match = Math.random() < 0.5;
+        let ink = match ? w : (w + 1 + Math.floor(Math.random() * 5)) % 6;
+        q.textContent = names[w]; q.style.color = inks[ink]; q.style.textShadow = '0 0 18px ' + inks[ink];
+        yes.className = 'ans'; no.className = 'ans';
+      }
+      function pick(saysMatch, btn) {
+        if (lock || ended) return;
+        const ok = saysMatch === match; pts += ok ? 1 : -1; if (pts < 0) pts = 0;
+        btn.classList.add(ok ? 'good' : 'bad'); tone(ok ? 760 : 160, ok ? 0.08 : 0.2, ok ? 'triangle' : 'sawtooth');
+        setScore('Points <b>' + pts + '</b>');
+        lock = true; later(() => { lock = false; ask(); }, 160);
+      }
+      yes.addEventListener('click', () => pick(true, yes)); no.addEventListener('click', () => pick(false, no));
+      onKey(e => { if (e.key === 'ArrowLeft') pick(true, yes); else if (e.key === 'ArrowRight') pick(false, no); });
+      setScore('Points <b>0</b>'); ask();
+    } });
+
+  // ---------- hub ----------
+  function drawHub() {
+    const tiles = $('tiles'); tiles.innerHTML = '';
+    for (const g of GAMES) {
+      const b = document.createElement('button'); b.className = 't'; b.style.setProperty('--a', C(g.c));
+      b.innerHTML = `<span class="ico"><svg viewBox="0 0 24 24">${g.icon}</svg></span><h2>${g.name}</h2><p>${g.blurb}</p><span class="best">Best <b>${fmtBest(g)}</b></span>`;
+      b.addEventListener('click', () => open(g));
+      tiles.appendChild(b);
+    }
+  }
+  drawHub();
+})();
+</script>
+
+</body>
+</html>

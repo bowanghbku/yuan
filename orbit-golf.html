@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orbit Golf</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Lexend:wght@400;600;800&display=swap">
+<style>
+/* Layout: scorecard strip over a letterboxed 16:9 space course; overlay cards for title, hole-complete and final scorecard. Single dark space look by choice. */
+:root {
+  --void: #050713;
+  --ink: #eef1ff;
+  --muted: #8890b5;
+  --ball: #ffe9a8;
+  --hole: #9b7bff;
+  --green: #74f0b0;
+  --panel: rgba(12, 14, 34, 0.92);
+  --display: "Lexend", system-ui, sans-serif;
+  --mono: "Space Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--void); color: var(--ink); font-family: var(--display); overflow: hidden; -webkit-user-select: none; user-select: none; }
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); box-sizing: border-box; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; padding-block: max(10px, env(safe-area-inset-top, 0px)) 8px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.bar .logo { font-family: var(--display); font-weight: 800; font-size: 18px; color: var(--ball); letter-spacing: 0.02em; }
+.bar b { color: var(--ink); font-weight: 700; }
+.sp { flex: 1; }
+.btn { font: 600 12.5px var(--display); color: var(--ink); background: rgba(255,255,255,0.05); border: 1px solid #262b52; border-radius: 8px; padding: 7px 11px; cursor: pointer; }
+.btn:focus-visible, .go:focus-visible { outline: 2px solid var(--ball); outline-offset: 2px; }
+.board { min-height: 0; display: grid; place-items: center; padding-bottom: max(10px, env(safe-area-inset-bottom, 0px)); }
+canvas { display: block; touch-action: none; border-radius: 12px; box-shadow: 0 0 0 1px #1c2148; cursor: crosshair; }
+.overlay { position: fixed; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); background: rgba(3, 4, 12, 0.55); }
+.card { width: 100%; max-width: 440px; background: var(--panel); border: 1px solid #2a2f5c; border-radius: 16px; padding: 24px; display: grid; gap: 12px; }
+.card h1 { margin: 0; font-weight: 800; font-size: clamp(38px, 9vw, 54px); line-height: 0.95; color: var(--ball); text-shadow: 0 0 22px rgba(255, 233, 168, 0.45); }
+.card h2 { margin: 0; font-weight: 800; font-size: 28px; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
+.card p b { color: var(--ink); }
+.go { justify-self: start; font: 600 15px var(--display); color: #120f04; background: var(--ball); border: 0; border-radius: 10px; padding: 10px 20px; cursor: pointer; box-shadow: 0 0 18px rgba(255, 233, 168, 0.45); }
+.score { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.score th, .score td { padding: 4px 3px; text-align: center; border-bottom: 1px solid #22274a; }
+.score th { color: var(--muted); font-weight: 400; }
+.score .under { color: var(--green); } .score .over { color: #ff8a8a; }
+.scorewrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="bar">
+    <span class="logo">Orbit Golf</span>
+    <span>Hole <b id="hNum">1</b>/12</span>
+    <span>Par <b id="hPar">1</b></span>
+    <span>Strokes <b id="hStrokes">0</b></span>
+    <span>Total <b id="hTotal">E</b></span>
+    <span class="sp"></span>
+    <button class="btn" id="resetBtn">Retry hole</button>
+  </div>
+  <div class="board" id="board"><canvas id="c"></canvas></div>
+</div>
+
+<div class="overlay" id="title">
+  <div class="card">
+    <h1>Orbit Golf</h1>
+    <p>Mini golf in space. <b>Drag back</b> from your comet ball and let go to fling it, like a slingshot. The further you pull, the harder the shot.</p>
+    <p><b>Planets pull</b> on the ball, bending its path, so you can curve shots around them. Ball resting on a planet? Shoot from there. Sink it in the purple <b>wormhole</b>.</p>
+    <p><b>Black holes</b> swallow the ball: +1 penalty stroke and you shoot again from where you were. 12 holes; try to finish under par.</p>
+    <button class="go" id="startBtn">Tee off</button>
+  </div>
+</div>
+<div class="overlay" id="sunk" hidden>
+  <div class="card">
+    <h2 id="sunkTitle">Par</h2>
+    <p id="sunkText"></p>
+    <button class="go" id="nextBtn">Next hole</button>
+  </div>
+</div>
+<div class="overlay" id="final" hidden>
+  <div class="card">
+    <h2 id="finalTitle">Course complete</h2>
+    <div class="scorewrap"><table class="score" id="card"></table></div>
+    <p id="finalText"></p>
+    <button class="go" id="againBtn">Play the course again</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const cv = $('c'), ctx = cv.getContext('2d');
+  const W = 960, H = 540;
+  function resize() {
+    const r = $('board').getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    const s = Math.min(r.width / W, (r.height - 4) / H);
+    cv.style.width = W * s + 'px'; cv.style.height = H * s + 'px';
+    cv.width = Math.round(W * s * dpr); cv.height = Math.round(H * s * dpr);
+    ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+  }
+  addEventListener('resize', resize); resize();
+
+  // ---------- course ----------
+  // p: planets [x,y,r,colour], b: black holes [x,y], m: moons orbiting [cx,cy,orbitR,r,speed]
+  const COURSE = [
+    { par: 1, s: [120, 270], h: [840, 270], p: [] },
+    { par: 2, s: [110, 270], h: [850, 270], p: [[480, 270, 70, '#4fb3ff']] },
+    { par: 2, s: [110, 120], h: [850, 420], p: [[380, 330, 60, '#ff8a5c'], [600, 180, 55, '#74f0b0']] },
+    { par: 2, s: [130, 440], h: [600, 150], p: [[600, 290, 80, '#c49bff']] },
+    { par: 3, s: [100, 270], h: [860, 270], p: [[320, 150, 50, '#ffd36a'], [320, 390, 50, '#ffd36a']], b: [[600, 270]] },
+    { par: 3, s: [120, 270], h: [820, 270], p: [[640, 270, 95, '#4fb3ff']] },
+    { par: 3, s: [100, 460], h: [870, 80], p: [[260, 300, 34, '#ff8a5c'], [430, 200, 40, '#74f0b0'], [600, 360, 36, '#ffd36a'], [720, 180, 30, '#c49bff']] },
+    { par: 3, s: [110, 90], h: [110, 450], p: [[520, 270, 75, '#ff8a5c']], b: [[230, 270], [360, 270]] },
+    { par: 3, s: [480, 470], h: [480, 270], p: [[340, 270, 40, '#4fb3ff'], [620, 270, 40, '#4fb3ff'], [480, 140, 40, '#74f0b0']] },
+    { par: 3, s: [90, 270], h: [880, 270], p: [[480, 100, 45, '#ffd36a'], [480, 440, 45, '#ffd36a']], b: [[480, 200], [480, 340]] },
+    { par: 3, s: [110, 420], h: [850, 140], p: [[480, 270, 70, '#c49bff']], m: [[480, 270, 160, 22, 0.8]] },
+    { par: 4, s: [90, 470], h: [870, 70], p: [[250, 250, 55, '#4fb3ff'], [520, 380, 60, '#ff8a5c'], [690, 160, 50, '#74f0b0']], b: [[400, 120], [760, 330]], m: [[520, 380, 120, 16, -1.1]] }
+  ];
+  const K = 650;           // surface gravity scale
+  const BH_K = 160000;     // black hole pull
+  const BR = 8;            // ball radius
+  let hole = 0, ball, strokes, scores = [], state = 'title', aim = null, t = 0, trail = [], restT = 0, flightT = 0, lastShot = null, parts = [], msg = null;
+
+  function load(i) {
+    hole = i; const L = COURSE[i];
+    ball = { x: L.s[0], y: L.s[1], vx: 0, vy: 0, moving: false };
+    strokes = 0; trail = []; parts = []; lastShot = { x: ball.x, y: ball.y }; msg = null;
+    hud();
+  }
+  function moons(L, time) { return (L.m || []).map(([cx, cy, or, r, sp]) => [cx + Math.cos(time * sp) * or, cy + Math.sin(time * sp) * or, r, '#d6d9e8']); }
+  const bodies = time => { const L = COURSE[hole]; return [...L.p, ...moons(L, time)]; };
+  function accel(x, y, time) {
+    let ax = 0, ay = 0;
+    for (const [px, py, r] of bodies(time)) { const dx = px - x, dy = py - y, d2 = Math.max(dx * dx + dy * dy, r * r), d = Math.sqrt(d2), a = K * r * r / d2; ax += a * dx / d; ay += a * dy / d; }
+    for (const [bx, by] of COURSE[hole].b || []) { const dx = bx - x, dy = by - y, d2 = Math.max(dx * dx + dy * dy, 400), d = Math.sqrt(d2), a = BH_K / d2; ax += a * dx / d; ay += a * dy / d; }
+    const [hx, hy] = COURSE[hole].h, dx = hx - x, dy = hy - y, d = Math.hypot(dx, dy);
+    if (d < 70 && d > 1) { const a = 900 * (1 - d / 70); ax += a * dx / d; ay += a * dy / d; }
+    return [ax, ay];
+  }
+  function hud() {
+    $('hNum').textContent = hole + 1; $('hPar').textContent = COURSE[hole].par; $('hStrokes').textContent = strokes;
+    const done = scores.reduce((a, s, i) => a + s - COURSE[i].par, 0);
+    $('hTotal').textContent = done === 0 ? 'E' : (done > 0 ? '+' + done : done);
+  }
+
+  // ---------- audio ----------
+  let actx = null;
+  function tone(f, d = 0.12, type = 'sine', v = 0.1, glide = 1) {
+    try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const o = actx.createOscillator(), g = actx.createGain(), n = actx.currentTime;
+      o.type = type; o.frequency.setValueAtTime(f, n); o.frequency.exponentialRampToValueAtTime(f * glide, n + d); g.gain.setValueAtTime(v, n); g.gain.exponentialRampToValueAtTime(0.001, n + d);
+      o.connect(g).connect(actx.destination); o.start(n); o.stop(n + d + 0.02); } catch (e) {}
+  }
+
+  // ---------- physics ----------
+  function step(o, dt, time, sim) {
+    const [ax, ay] = accel(o.x, o.y, time);
+    o.vx += ax * dt; o.vy += ay * dt;
+    const drag = Math.pow(0.72, dt); o.vx *= drag; o.vy *= drag;
+    o.x += o.vx * dt; o.y += o.vy * dt;
+    // walls
+    if (o.x < BR) { o.x = BR; o.vx = Math.abs(o.vx) * 0.7; } if (o.x > W - BR) { o.x = W - BR; o.vx = -Math.abs(o.vx) * 0.7; }
+    if (o.y < BR) { o.y = BR; o.vy = Math.abs(o.vy) * 0.7; } if (o.y > H - BR) { o.y = H - BR; o.vy = -Math.abs(o.vy) * 0.7; }
+    // planet surfaces
+    o.onPlanet = false;
+    for (const [px, py, r] of bodies(time)) {
+      const dx = o.x - px, dy = o.y - py, d = Math.hypot(dx, dy);
+      if (d < r + BR) {
+        const nx = dx / d, ny = dy / d; o.x = px + nx * (r + BR); o.y = py + ny * (r + BR);
+        const vn = o.vx * nx + o.vy * ny;
+        if (vn < 0) { o.vx -= 1.55 * vn * nx; o.vy -= 1.55 * vn * ny; if (!sim && vn < -60) tone(180 + Math.min(-vn, 400) * 0.3, 0.06, 'triangle', 0.05); }
+        const f = Math.pow(0.12, dt); o.vx *= f; o.vy *= f;
+        o.onPlanet = true;
+      }
+    }
+  }
+  function shoot(vx, vy) {
+    lastShot = { x: ball.x, y: ball.y }; strokes++; hud();
+    ball.vx = vx; ball.vy = vy; ball.moving = true; restT = 0; flightT = 0; trail = [];
+    tone(300, 0.15, 'triangle', 0.1, 1.8);
+  }
+  function update(dt) {
+    t += dt;
+    for (const p of parts) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; } parts = parts.filter(p => p.life > 0);
+    if (msg) { msg.life -= dt; if (msg.life <= 0) msg = null; }
+    if (state !== 'play' || !ball.moving) {
+      // a ball resting on a moon rides along with it
+      if (state === 'play' && ball.ride) { const m = moons(COURSE[hole], t)[ball.ride.i]; if (m) { ball.x = m[0] + Math.cos(ball.ride.a) * (m[2] + BR); ball.y = m[1] + Math.sin(ball.ride.a) * (m[2] + BR); } }
+      return;
+    }
+    const sub = 4;
+    for (let k = 0; k < sub; k++) {
+      step(ball, dt / sub, t, false);
+      const [hx, hy] = COURSE[hole].h;
+      if (Math.hypot(hx - ball.x, hy - ball.y) < 15 && Math.hypot(ball.vx, ball.vy) < 520) return sink();
+      for (const [bx, by] of COURSE[hole].b || []) if (Math.hypot(bx - ball.x, by - ball.y) < 16) return swallowed(bx, by);
+    }
+    trail.push([ball.x, ball.y]); if (trail.length > 40) trail.shift();
+    flightT += dt;
+    const sp = Math.hypot(ball.vx, ball.vy);
+    if (sp < 22) restT += dt; else restT = 0;
+    if (restT > 0.35 || flightT > 14) {
+      ball.moving = false; ball.vx = ball.vy = 0; ball.ride = null;
+      const ms = moons(COURSE[hole], t);
+      ms.forEach((m, i) => { const d = Math.hypot(ball.x - m[0], ball.y - m[1]); if (d < m[2] + BR + 3) ball.ride = { i, a: Math.atan2(ball.y - m[1], ball.x - m[0]) }; });
+    }
+  }
+  function sink() {
+    ball.moving = false; state = 'sunk';
+    const [hx, hy] = COURSE[hole].h; ball.x = hx; ball.y = hy;
+    for (let i = 0; i < 30; i++) { const a = Math.random() * 6.28, v = 40 + Math.random() * 160; parts.push({ x: hx, y: hy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.8, c: Math.random() < 0.5 ? '#9b7bff' : '#ffe9a8' }); }
+    tone(523, 0.15, 'triangle', 0.12); setTimeout(() => tone(784, 0.3, 'triangle', 0.12), 130);
+    scores[hole] = strokes;
+    const d = strokes - COURSE[hole].par;
+    const names = { '-3': 'Albatross!', '-2': 'Eagle!', '-1': 'Birdie!', '0': 'Par', '1': 'Bogey', '2': 'Double bogey' };
+    const name = strokes === 1 ? 'Hole in one!' : (names[String(d)] || '+' + d);
+    hud();
+    setTimeout(() => {
+      $('sunkTitle').textContent = name;
+      $('sunkText').textContent = 'Hole ' + (hole + 1) + ' in ' + strokes + ' stroke' + (strokes === 1 ? '' : 's') + ' (par ' + COURSE[hole].par + ').';
+      $('nextBtn').textContent = hole === COURSE.length - 1 ? 'See scorecard' : 'Hole ' + (hole + 2);
+      $('sunk').hidden = false; $('nextBtn').focus();
+    }, 700);
+  }
+  function swallowed(bx, by) {
+    ball.moving = false; strokes++; hud();
+    tone(90, 0.5, 'sawtooth', 0.1, 0.5);
+    for (let i = 0; i < 24; i++) { const a = Math.random() * 6.28, v = 30 + Math.random() * 100; parts.push({ x: bx + Math.cos(a) * 40, y: by + Math.sin(a) * 40, vx: -Math.cos(a) * v, vy: -Math.sin(a) * v, life: 0.5, c: '#ffe9a8' }); }
+    msg = { txt: 'Swallowed! +1 stroke', life: 1.6 };
+    ball.x = lastShot.x; ball.y = lastShot.y; ball.vx = ball.vy = 0; trail = [];
+  }
+  function finish() {
+    state = 'final';
+    const total = scores.reduce((a, b) => a + b, 0), par = COURSE.reduce((a, h) => a + h.par, 0), d = total - par;
+    let best = null; try { best = +localStorage.getItem('orbitgolf-best') || null; } catch (e) {}
+    const nb = best === null || total < best; if (nb) { try { localStorage.setItem('orbitgolf-best', String(total)); } catch (e) {} }
+    const row = (lab, arr, cls) => '<tr><th>' + lab + '</th>' + arr.map((v, i) => '<td class="' + (cls ? cls(i) : '') + '">' + v + '</td>').join('') + '</tr>';
+    $('card').innerHTML = row('Hole', COURSE.map((_, i) => i + 1)) + row('Par', COURSE.map(h => h.par)) + row('You', scores, i => scores[i] < COURSE[i].par ? 'under' : scores[i] > COURSE[i].par ? 'over' : '');
+    $('finalTitle').textContent = d < 0 ? d + ' under par!' : d === 0 ? 'Even par' : '+' + d + ' over par';
+    $('finalText').textContent = total + ' strokes (par ' + par + '). ' + (nb ? 'That\'s your best round.' : 'Your best round is ' + best + '.');
+    $('final').hidden = false; $('againBtn').focus();
+  }
+
+  // ---------- input ----------
+  const toLocal = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; };
+  cv.addEventListener('pointerdown', e => {
+    if (state !== 'play' || ball.moving) return;
+    e.preventDefault(); cv.setPointerCapture(e.pointerId);
+    aim = { sx: ball.x, sy: ball.y, x: toLocal(e).x, y: toLocal(e).y };
+  });
+  cv.addEventListener('pointermove', e => { if (aim) { const p = toLocal(e); aim.x = p.x; aim.y = p.y; } });
+  const MAXPULL = 170, POWER = 4.6;
+  function shotVel() { let dx = aim.sx - aim.x, dy = aim.sy - aim.y; const d = Math.hypot(dx, dy); if (d > MAXPULL) { dx *= MAXPULL / d; dy *= MAXPULL / d; } return [dx * POWER, dy * POWER, Math.min(d, MAXPULL)]; }
+  cv.addEventListener('pointerup', () => {
+    if (!aim) return;
+    const [vx, vy, d] = shotVel(); aim = null;
+    if (d > 8) shoot(vx, vy);
+  });
+  cv.addEventListener('pointercancel', () => { aim = null; });
+  $('resetBtn').addEventListener('click', () => { if (state === 'play') { const s = scores.slice(); load(hole); scores = s; } });
+  $('startBtn').addEventListener('click', () => { $('title').hidden = true; scores = []; load(0); state = 'play'; });
+  $('nextBtn').addEventListener('click', () => { $('sunk').hidden = true; if (hole === COURSE.length - 1) finish(); else { load(hole + 1); state = 'play'; } });
+  $('againBtn').addEventListener('click', () => { $('final').hidden = true; scores = []; load(0); state = 'play'; });
+
+  // ---------- drawing ----------
+  const stars = Array.from({ length: 160 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: Math.random() * 1.4 + 0.3, ph: Math.random() * 6 }));
+  function planet(x, y, r, col) {
+    const g = ctx.createRadialGradient(x, y, r * 0.8, x, y, r * 1.6); g.addColorStop(0, col + '33'); g.addColorStop(1, col + '00');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, 7); ctx.fill();
+    const b = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r); b.addColorStop(0, '#ffffff'); b.addColorStop(0.15, col); b.addColorStop(1, '#0b0d22');
+    ctx.fillStyle = b; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1.5;
+    for (let k = 1; k <= 2; k++) { ctx.beginPath(); ctx.ellipse(x, y + r * 0.2 * k - r * 0.2, r * 0.9, r * 0.18, 0, 0, 7); ctx.stroke(); }
+  }
+  function render() {
+    ctx.fillStyle = '#050713'; ctx.fillRect(0, 0, W, H);
+    for (const s of stars) { ctx.fillStyle = 'rgba(238,241,255,' + (0.25 + Math.sin(t * 1.5 + s.ph) * 0.15) + ')'; ctx.fillRect(s.x, s.y, s.s, s.s); }
+    const L = COURSE[hole];
+    // moon orbits
+    for (const [cx, cy, or] of L.m || []) { ctx.strokeStyle = 'rgba(214,217,232,0.12)'; ctx.setLineDash([4, 8]); ctx.beginPath(); ctx.arc(cx, cy, or, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
+    for (const [x, y, r, c] of L.p) planet(x, y, r, c);
+    for (const [x, y, r, c] of moons(L, t)) planet(x, y, r, c);
+    // black holes
+    for (const [x, y] of L.b || []) {
+      ctx.save(); ctx.translate(x, y);
+      for (let k = 0; k < 3; k++) { ctx.rotate(t * (0.8 + k * 0.4)); ctx.strokeStyle = 'rgba(255,140,90,' + (0.35 - k * 0.1) + ')'; ctx.lineWidth = 3 - k; ctx.beginPath(); ctx.ellipse(0, 0, 36 - k * 6, 14 - k * 3, 0, 0, 7); ctx.stroke(); }
+      ctx.fillStyle = '#000'; ctx.shadowColor = '#ff8a5c'; ctx.shadowBlur = 20; ctx.beginPath(); ctx.arc(0, 0, 13, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+    // wormhole
+    { const [x, y] = L.h; ctx.save(); ctx.translate(x, y);
+      for (let k = 0; k < 4; k++) { ctx.rotate(-t * 1.5); ctx.strokeStyle = 'rgba(155,123,255,' + (0.7 - k * 0.15) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 22 - k * 4, 0, Math.PI * 1.4); ctx.stroke(); }
+      ctx.fillStyle = '#1a0f3a'; ctx.shadowColor = '#9b7bff'; ctx.shadowBlur = 20; ctx.beginPath(); ctx.arc(0, 0, 8, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.restore(); }
+    // trajectory preview while aiming
+    if (aim) {
+      const [vx, vy, d] = shotVel();
+      const sim = { x: ball.x, y: ball.y, vx, vy };
+      ctx.fillStyle = 'rgba(255,233,168,0.7)';
+      for (let i = 0; i < 70; i++) { for (let k = 0; k < 2; k++) step(sim, 1 / 120, t, true); if (i % 3 === 0) { ctx.globalAlpha = 1 - i / 70; ctx.beginPath(); ctx.arc(sim.x, sim.y, 2.2, 0, 7); ctx.fill(); } }
+      ctx.globalAlpha = 1;
+      // pull band
+      const pl = Math.min(d, MAXPULL) / MAXPULL;
+      ctx.strokeStyle = 'hsl(' + (120 - pl * 120) + ',90%,65%)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(ball.x, ball.y);
+      const dx = aim.x - aim.sx, dy = aim.y - aim.sy, dd = Math.hypot(dx, dy) || 1, k = Math.min(dd, MAXPULL) / dd; ctx.lineTo(ball.x + dx * k, ball.y + dy * k); ctx.stroke();
+    }
+    // trail + ball
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    trail.forEach(([x, y], i) => { const a = i / trail.length; ctx.fillStyle = 'rgba(255,200,120,' + a * 0.35 + ')'; ctx.beginPath(); ctx.arc(x, y, BR * a, 0, 7); ctx.fill(); });
+    ctx.restore();
+    if (state !== 'sunk' && state !== 'final') {
+      ctx.fillStyle = '#ffe9a8'; ctx.shadowColor = '#ffd36a'; ctx.shadowBlur = 16; ctx.beginPath(); ctx.arc(ball.x, ball.y, BR, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+      if (!ball.moving && !aim && state === 'play') { ctx.strokeStyle = 'rgba(255,233,168,' + (0.3 + Math.sin(t * 4) * 0.2) + ')'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(ball.x, ball.y, BR + 8, 0, 7); ctx.stroke(); }
+    }
+    for (const p of parts) { ctx.globalAlpha = Math.max(0, p.life * 1.4); ctx.fillStyle = p.c; ctx.fillRect(p.x, p.y, 3, 3); }
+    ctx.globalAlpha = 1;
+    if (msg) { ctx.font = '600 22px Lexend, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,138,92,' + Math.min(1, msg.life) + ')'; ctx.fillText(msg.txt, W / 2, 44); }
+    if (state === 'play' && strokes === 0 && !aim && hole === 0) { ctx.font = '400 15px Lexend, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(238,241,255,0.7)'; ctx.fillText('Drag back from the ball and let go', ball.x + 60, ball.y + 40); }
+  }
+
+  load(0);
+  let last = performance.now();
+  (function loop(now) { const dt = Math.max(0, Math.min(0.033, (now - last) / 1000)); last = now; update(dt); render(); requestAnimationFrame(loop); })(last);
+})();
+</script>
+</body>
+</html>
